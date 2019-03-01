@@ -25,7 +25,9 @@ import java.security.KeyStore.PasswordProtection;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.Provider;
 import java.security.SecureRandom;
+import java.security.Security;
 import java.security.UnrecoverableEntryException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
@@ -39,6 +41,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -80,6 +83,8 @@ public class SslManagerServiceImpl implements SslManagerService, ConfigurableCom
     private Map<ConnectionSslOptions, SSLSocketFactory> sslSocketFactories;
 
     private SystemService systemService;
+
+    private final AtomicBoolean isPKCS11Enabled = new AtomicBoolean(false);
 
     // ----------------------------------------------------------------
     //
@@ -131,6 +136,18 @@ public class SslManagerServiceImpl implements SslManagerService, ConfigurableCom
 
         ServiceTracker<SslServiceListener, SslServiceListener> listenersTracker = new ServiceTracker<>(
                 componentContext.getBundleContext(), SslServiceListener.class, null);
+
+        try {
+            Provider[] p = Security.getProviders();
+            for (Provider element : p) {
+                if (element.getName().contains("PKCS11")) {
+                    this.isPKCS11Enabled.set(true);
+                    logger.info("PKCS11 provider found");
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error getting providers", e);
+        }
 
         // Deferred open of tracker to prevent
         // java.lang.Exception: Recursive invocation of
@@ -273,17 +290,29 @@ public class SslManagerServiceImpl implements SslManagerService, ConfigurableCom
 
     private void saveKeystore(String keyStoreFileName, char[] keyStorePassword, KeyStore ks)
             throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException {
-        try (FileOutputStream tsOutStream = new FileOutputStream(keyStoreFileName);) {
-            ks.store(tsOutStream, keyStorePassword);
+        if (this.isPKCS11Enabled.get()) {
+            ks.store(null);
+        } else {
+            try (FileOutputStream tsOutStream = new FileOutputStream(keyStoreFileName);) {
+                ks.store(tsOutStream, keyStorePassword);
+            }
         }
     }
 
     private KeyStore loadKeystore(String keyStore, char[] keyStorePassword)
             throws KeyStoreException, IOException, NoSuchAlgorithmException, CertificateException {
-        KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+        KeyStore ks;
 
-        try (InputStream tsReadStream = new FileInputStream(keyStore);) {
-            ks.load(tsReadStream, keyStorePassword);
+        if (this.isPKCS11Enabled.get()) {
+            char[] pin = "1234".toCharArray();
+            ks = KeyStore.getInstance("PKCS11");
+            ks.load(null, pin);
+        } else {
+            ks = KeyStore.getInstance(KeyStore.getDefaultType());
+
+            try (InputStream tsReadStream = new FileInputStream(keyStore);) {
+                ks.load(tsReadStream, keyStorePassword);
+            }
         }
 
         return ks;
@@ -472,23 +501,34 @@ public class SslManagerServiceImpl implements SslManagerService, ConfigurableCom
         return new SSLSocketFactoryWrapper(sslSocketFactory, ciphers, hostnameVerification);
     }
 
-    private static TrustManager[] getTrustManagers(String trustStore, char[] keyStorePassword)
+    private TrustManager[] getTrustManagers(String trustStore, char[] keyStorePassword)
             throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException {
         TrustManager[] result = new TrustManager[0];
         TrustManagerFactory tmf = null;
-        if (trustStore != null) {
 
-            // Load the configured the Trust Store
-            File fTrustStore = new File(trustStore);
-            if (fTrustStore.exists()) {
+        if (this.isPKCS11Enabled.get()) {
+            char[] pin = "1234".toCharArray();
+            KeyStore ks = KeyStore.getInstance("PKCS11");
+            ks.load(null, pin);
+            tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(ks);
+            result = tmf.getTrustManagers();
+        } else {
 
-                KeyStore ts = KeyStore.getInstance(KeyStore.getDefaultType());
-                InputStream tsReadStream = new FileInputStream(trustStore);
-                ts.load(tsReadStream, keyStorePassword);
-                tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-                tmf.init(ts);
-                result = tmf.getTrustManagers();
-                tsReadStream.close();
+            if (trustStore != null) {
+
+                // Load the configured the Trust Store
+                File fTrustStore = new File(trustStore);
+                if (fTrustStore.exists()) {
+
+                    KeyStore ts = KeyStore.getInstance(KeyStore.getDefaultType());
+                    InputStream tsReadStream = new FileInputStream(trustStore);
+                    ts.load(tsReadStream, keyStorePassword);
+                    tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                    tmf.init(ts);
+                    result = tmf.getTrustManagers();
+                    tsReadStream.close();
+                }
             }
         }
         return result;
@@ -508,28 +548,47 @@ public class SslManagerServiceImpl implements SslManagerService, ConfigurableCom
     private KeyStore getKeyStore(String keyStore, char[] keyStorePassword, String keyAlias) throws KeyStoreException,
             IOException, NoSuchAlgorithmException, CertificateException, UnrecoverableEntryException {
 
-        // Load the configured the Key Store
-        File fKeyStore = new File(keyStore);
-        if (!fKeyStore.exists() || !isKeyStoreAccessible(keyStore, keyStorePassword)) {
-            logger.warn("The referenced keystore does not exist or is not accessible");
-            throw new KeyStoreException("The referenced keystore does not exist or is not accessible");
-        }
+        if (this.isPKCS11Enabled.get()) {
+            char[] pin = "1234".toCharArray();
+            KeyStore ks = KeyStore.getInstance("PKCS11");
+            ks.load(null, pin);
 
-        try (InputStream ksReadStream = new FileInputStream(keyStore);) {
-            KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
-            ks.load(ksReadStream, keyStorePassword);
-
-            // if we have an alias, then build KeyStore with such key
             if (ks.containsAlias(keyAlias) && ks.isKeyEntry(keyAlias)) {
-                PasswordProtection pp = new PasswordProtection(keyStorePassword);
-                Entry entry = ks.getEntry(keyAlias, pp);
-                ks = KeyStore.getInstance(KeyStore.getDefaultType());
-                ks.load(null, null);
-                ks.setEntry(keyAlias, entry, pp);
+                return ks;
             }
 
             return ks;
+        } else {
+            // Load the configured the Key Store
+            File fKeyStore = new File(keyStore);
+            if (!fKeyStore.exists() || !isKeyStoreAccessible(keyStore, keyStorePassword)) {
+                logger.warn("The referenced keystore does not exist or is not accessible");
+                throw new KeyStoreException("The referenced keystore does not exist or is not accessible");
+            }
+
+            try (InputStream ksReadStream = new FileInputStream(keyStore);) {
+                KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+                ks.load(ksReadStream, keyStorePassword);
+
+                // if we have an alias, then build KeyStore with such key
+                if (ks.containsAlias(keyAlias) && ks.isKeyEntry(keyAlias)) {
+                    ks = createMutualAuthenticationKeyStore(keyStorePassword, keyAlias, ks);
+                }
+
+                return ks;
+            }
         }
+    }
+
+    private KeyStore createMutualAuthenticationKeyStore(char[] keyStorePassword, String keyAlias, KeyStore ks)
+            throws NoSuchAlgorithmException, UnrecoverableEntryException, KeyStoreException, IOException,
+            CertificateException {
+        PasswordProtection pp = new PasswordProtection(keyStorePassword);
+        Entry entry = ks.getEntry(keyAlias, pp);
+        KeyStore maks = KeyStore.getInstance(KeyStore.getDefaultType());
+        maks.load(null, null);
+        maks.setEntry(keyAlias, entry, pp);
+        return maks;
     }
 
     private char[] getKeyStorePassword() {
