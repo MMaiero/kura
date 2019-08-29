@@ -51,6 +51,7 @@ public class LinuxFirewall {
     private Set<NATRule> natRules;
     private boolean allowIcmp;
     private boolean allowForwarding;
+    private boolean floodingProtectionEnabled;
 
     private LinuxFirewall() {
         try {
@@ -88,6 +89,7 @@ public class LinuxFirewall {
         this.natRules = iptables.getNatRules();
         this.allowIcmp = true;
         this.allowForwarding = false;
+        this.floodingProtectionEnabled = iptables.isFloodProtectionEnabled();
         logger.debug("initialize() :: Parsing current firewall configuraion");
     }
 
@@ -101,12 +103,12 @@ public class LinuxFirewall {
                 logger.debug("permittedNetworkPrefix: {}", permittedNetworkPrefix);
 
                 newLocalRule = new LocalRule(port, protocol,
-                        new NetworkPair<IP4Address>((IP4Address) IPAddress.parseHostAddress(permittedNetwork),
+                        new NetworkPair<>((IP4Address) IPAddress.parseHostAddress(permittedNetwork),
                                 Short.parseShort(permittedNetworkPrefix)),
                         permittedInterfaceName, unpermittedInterfaceName, permittedMAC, sourcePortRange);
             } else {
                 newLocalRule = new LocalRule(port, protocol,
-                        new NetworkPair<IP4Address>((IP4Address) IPAddress.parseHostAddress("0.0.0.0"), (short) 0),
+                        new NetworkPair<>((IP4Address) IPAddress.parseHostAddress("0.0.0.0"), (short) 0),
                         permittedInterfaceName, permittedInterfaceName, permittedMAC, sourcePortRange);
             }
 
@@ -181,13 +183,11 @@ public class LinuxFirewall {
                     }
                 }
                 if (addRule) {
-                    logger.info("Adding port forward rule to firewall configuration: {}",
-                            newPortForwardRule.toString());
+                    logger.info("Adding port forward rule to firewall configuration: {}", newPortForwardRule);
                     this.portForwardRules.add(newPortForwardRule);
                     doUpdate = true;
                 } else {
-                    logger.warn("Not adding port forward rule that is already present: {}",
-                            newPortForwardRule.toString());
+                    logger.warn("Not adding port forward rule that is already present: {}", newPortForwardRule);
                 }
             }
             if (doUpdate) {
@@ -219,9 +219,9 @@ public class LinuxFirewall {
             }
 
             NATRule newNatRule = new NATRule(sourceInterface, destinationInterface, masquerade);
-            ArrayList<NATRule> natRules = new ArrayList<>();
-            natRules.add(newNatRule);
-            addAutoNatRules(natRules);
+            ArrayList<NATRule> newNatRules = new ArrayList<>();
+            newNatRules.add(newNatRule);
+            addAutoNatRules(newNatRules);
         } catch (Exception e) {
             throw new KuraException(KuraErrorCode.INTERNAL_ERROR, e);
         }
@@ -362,8 +362,8 @@ public class LinuxFirewall {
         }
         try {
             this.autoNatRules.remove(rule);
-            if (this.autoNatRules != null && this.autoNatRules.isEmpty() && this.natRules != null
-                    && this.natRules.isEmpty() && this.portForwardRules != null && this.portForwardRules.isEmpty()) {
+            if (this.autoNatRules.isEmpty() && this.natRules != null && this.natRules.isEmpty()
+                    && this.portForwardRules != null && this.portForwardRules.isEmpty()) {
 
                 this.allowForwarding = false;
             }
@@ -461,6 +461,8 @@ public class LinuxFirewall {
         }
         IptablesConfig iptables = new IptablesConfig(this.localRules, this.portForwardRules, this.autoNatRules,
                 this.natRules, this.allowIcmp);
+        iptables.setFloodProtectionEnabled(this.floodingProtectionEnabled);
+
         iptables.save(IptablesConfig.FIREWALL_TMP_CONFIG_FILE_NAME);
         IptablesConfig.restore(IptablesConfig.FIREWALL_TMP_CONFIG_FILE_NAME);
         logger.debug("Managing port forwarding...");
@@ -523,6 +525,14 @@ public class LinuxFirewall {
 
     public void disableForwarding() {
         this.allowForwarding = false;
+    }
+
+    public boolean isFloodingProtectionEnabled() {
+        return this.floodingProtectionEnabled;
+    }
+
+    public void setAllowFloodingProtection(boolean allowFloodingProtection) {
+        this.floodingProtectionEnabled = allowFloodingProtection;
     }
 
     private void update() throws KuraException {

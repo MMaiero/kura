@@ -35,6 +35,9 @@ import org.slf4j.LoggerFactory;
 public class IptablesConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(IptablesConfig.class);
+    private static final String FILTER_SECTION_SEPARATOR = "*filter";
+    private static final String COMMIT_COMMAND = "COMMIT";
+
     public static final String FIREWALL_CONFIG_FILE_NAME = "/etc/sysconfig/iptables";
     public static final String FIREWALL_TMP_CONFIG_FILE_NAME = "/tmp/iptables";
 
@@ -49,17 +52,45 @@ public class IptablesConfig {
             "-A INPUT -p icmp -m icmp --icmp-type 8 -m state --state NEW,RELATED,ESTABLISHED -j DROP",
             "-A OUTPUT -p icmp -m icmp --icmp-type 0 -m state --state RELATED,ESTABLISHED -j DROP" };
 
+    private static final String[] FLOOD_PROTECTION_PREROUTING = {
+            "-A PREROUTING -m conntrack --ctstate INVALID -j DROP",
+            "-A PREROUTING -p tcp ! --syn -m conntrack --ctstate NEW -j DROP",
+            "-A PREROUTING -p tcp -m conntrack --ctstate NEW -m tcpmss ! --mss 536:65535 -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags FIN,SYN,RST,PSH,ACK,URG NONE -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags FIN,SYN FIN,SYN -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags SYN,RST SYN,RST -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags FIN,RST FIN,RST -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags FIN,ACK FIN -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags ACK,URG URG -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags ACK,FIN FIN -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags ACK,PSH PSH -j DROP", "-A PREROUTING -p tcp --tcp-flags ALL ALL -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags ALL NONE -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags ALL FIN,PSH,URG -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags ALL SYN,FIN,PSH,URG -j DROP",
+            "-A PREROUTING -p tcp --tcp-flags ALL SYN,RST,ACK,FIN,URG -j DROP", "-A PREROUTING -p icmp -j DROP",
+            "-A PREROUTING -f -j DROP" };
+
+    private static final String[] FLOOD_PROTECTION = {
+            "-A INPUT -p tcp -m connlimit --connlimit-above 111 -j REJECT --reject-with tcp-reset",
+            "-A INPUT -p tcp --tcp-flags RST RST -m limit --limit 2/s --limit-burst 2 -j ACCEPT",
+            "-A INPUT -p tcp --tcp-flags RST RST -j DROP",
+            "-A INPUT -p tcp -m conntrack --ctstate NEW -m limit --limit 60/s --limit-burst 20 -j ACCEPT",
+            "-A INPUT -p tcp -m conntrack --ctstate NEW -j DROP" };
+
     private final Set<LocalRule> localRules;
     private final Set<PortForwardRule> portForwardRules;
     private final Set<NATRule> autoNatRules;
     private final Set<NATRule> natRules;
     private boolean allowIcmp;
+    private boolean floodProtectionEnabled;
 
     public IptablesConfig() {
         this.localRules = new LinkedHashSet<>();
         this.portForwardRules = new LinkedHashSet<>();
         this.autoNatRules = new LinkedHashSet<>();
         this.natRules = new LinkedHashSet<>();
+        this.allowIcmp = true;
+        this.floodProtectionEnabled = false;
     }
 
     public IptablesConfig(Set<LocalRule> localRules, Set<PortForwardRule> portForwardRules, Set<NATRule> autoNatRules,
@@ -81,9 +112,9 @@ public class IptablesConfig {
             fos = new FileOutputStream(FIREWALL_TMP_CONFIG_FILE_NAME);
             writer = new PrintWriter(fos);
             writer.println("*nat");
-            writer.println("COMMIT");
-            writer.println("*filter");
-            writer.println("COMMIT");
+            writer.println(COMMIT_COMMAND);
+            writer.println(FILTER_SECTION_SEPARATOR);
+            writer.println(COMMIT_COMMAND);
         } catch (Exception e) {
             logger.error("clear() :: failed to clear all chains ", e);
             throw new KuraException(KuraErrorCode.INTERNAL_ERROR, e);
@@ -110,11 +141,11 @@ public class IptablesConfig {
         try (FileOutputStream fos = new FileOutputStream(FIREWALL_TMP_CONFIG_FILE_NAME);
                 PrintWriter writer = new PrintWriter(fos)) {
             writer.println("*nat");
-            writer.println("COMMIT");
-            writer.println("*filter");
+            writer.println(COMMIT_COMMAND);
+            writer.println(FILTER_SECTION_SEPARATOR);
             writer.println(ALLOW_ALL_TRAFFIC_TO_LOOPBACK);
             writer.println(ALLOW_ONLY_INCOMING_TO_OUTGOING);
-            writer.println("COMMIT");
+            writer.println(COMMIT_COMMAND);
         } catch (Exception e) {
             logger.error("applyBlockPolicy() :: failed to clear all chains ", e);
             throw new KuraException(KuraErrorCode.INTERNAL_ERROR, e);
@@ -201,18 +232,33 @@ public class IptablesConfig {
     public void save(String filename) throws KuraException {
         try (FileOutputStream fos = new FileOutputStream(FIREWALL_TMP_CONFIG_FILE_NAME);
                 PrintWriter writer = new PrintWriter(fos)) {
-            writer.println("*filter");
+            if (this.floodProtectionEnabled) {
+                writer.println("*mangle");
+                for (String floodProtection : FLOOD_PROTECTION_PREROUTING) {
+                    writer.println(floodProtection);
+                }
+                writer.println(COMMIT_COMMAND);
+            }
+
+            writer.println(FILTER_SECTION_SEPARATOR);
             writer.println(ALLOW_ALL_TRAFFIC_TO_LOOPBACK);
             writer.println(ALLOW_ONLY_INCOMING_TO_OUTGOING);
-            if (this.allowIcmp) {
-                for (String sAllowIcmp : ALLOW_ICMP) {
-                    writer.println(sAllowIcmp);
-                }
-            } else {
-                for (String sDoNotAllowIcmp : DO_NOT_ALLOW_ICMP) {
-                    writer.println(sDoNotAllowIcmp);
+            // if (this.allowIcmp) {
+            // for (String sAllowIcmp : ALLOW_ICMP) {
+            // writer.println(sAllowIcmp);
+            // }
+            // } else {
+            // for (String sDoNotAllowIcmp : DO_NOT_ALLOW_ICMP) {
+            // writer.println(sDoNotAllowIcmp);
+            // }
+            // }
+
+            if (this.floodProtectionEnabled) {
+                for (String floodProtection : FLOOD_PROTECTION) {
+                    writer.println(floodProtection);
                 }
             }
+
             if (this.localRules != null && !this.localRules.isEmpty()) {
                 for (LocalRule lr : this.localRules) {
                     writer.println(lr);
@@ -248,7 +294,7 @@ public class IptablesConfig {
                     }
                 }
             }
-            writer.println("COMMIT");
+            writer.println(COMMIT_COMMAND);
             writer.println("*nat");
             if (this.portForwardRules != null && !this.portForwardRules.isEmpty()) {
                 for (PortForwardRule portForwardRule : this.portForwardRules) {
@@ -257,7 +303,7 @@ public class IptablesConfig {
                 }
             }
             if (this.autoNatRules != null && !this.autoNatRules.isEmpty()) {
-                List<NatPostroutingChainRule> appliedNatPostroutingChainRules = new ArrayList<NatPostroutingChainRule>();
+                List<NatPostroutingChainRule> appliedNatPostroutingChainRules = new ArrayList<>();
                 for (NATRule autoNatRule : this.autoNatRules) {
                     boolean found = false;
                     NatPostroutingChainRule natPostroutingChainRule = autoNatRule.getNatPostroutingChainRule();
@@ -280,7 +326,7 @@ public class IptablesConfig {
                     writer.println(natRule.getNatPostroutingChainRule());
                 }
             }
-            writer.println("COMMIT");
+            writer.println(COMMIT_COMMAND);
         } catch (Exception e) {
             logger.error("save() :: failed to clear all chains ", e);
             throw new KuraException(KuraErrorCode.INTERNAL_ERROR, e);
@@ -311,9 +357,9 @@ public class IptablesConfig {
                 }
                 if ("*nat".equals(line)) {
                     readingNatTable = true;
-                } else if ("*filter".equals(line)) {
+                } else if (FILTER_SECTION_SEPARATOR.equals(line)) {
                     readingFilterTable = true;
-                } else if ("COMMIT".equals(line)) {
+                } else if (COMMIT_COMMAND.equals(line)) {
                     if (readingNatTable) {
                         readingNatTable = false;
                     }
@@ -343,6 +389,13 @@ public class IptablesConfig {
                         if (allowIcmpProto.equals(line)) {
                             this.allowIcmp = false;
                             continue lineloop;
+                        }
+                    }
+
+                    for (String floodProtectionLine : FLOOD_PROTECTION) {
+                        if (floodProtectionLine.equals(line)) {
+                            this.floodProtectionEnabled = true;
+                            continue;
                         }
                     }
                     try {
@@ -486,5 +539,13 @@ public class IptablesConfig {
 
     public boolean allowIcmp() {
         return this.allowIcmp;
+    }
+
+    public boolean isFloodProtectionEnabled() {
+        return this.floodProtectionEnabled;
+    }
+
+    public void setFloodProtectionEnabled(boolean floodProtectionEnabled) {
+        this.floodProtectionEnabled = floodProtectionEnabled;
     }
 }
