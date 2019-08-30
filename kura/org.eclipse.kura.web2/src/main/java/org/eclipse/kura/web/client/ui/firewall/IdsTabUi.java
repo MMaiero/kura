@@ -11,8 +11,6 @@
  *******************************************************************************/
 package org.eclipse.kura.web.client.ui.firewall;
 
-import static org.eclipse.kura.web.client.util.FilterBuilder.or;
-
 import java.util.Iterator;
 
 import org.eclipse.kura.web.client.messages.Messages;
@@ -55,8 +53,7 @@ public class IdsTabUi extends AbstractServicesUi implements Tab {
     private final GwtComponentServiceAsync gwtComponentService = GWT.create(GwtComponentService.class);
 
     private static final String SERVICES_FILTER = FilterBuilder
-            .of(or("objectClass=org.eclipse.kura.security.LoginDosProtectionService",
-                    "objectClass=org.eclipse.kura.security.FloodingProtectionService"));
+            .of("objectClass=org.eclipse.kura.security.IdsProtectionService");
 
     private boolean dirty;
     private boolean initialized;

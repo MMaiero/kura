@@ -14,7 +14,7 @@
    <property name="kura.service.pid" type="String" value="org.eclipse.kura.floodingprotection.configuration.FloodingProtectionConfigurator"/>
    <property name="service.pid" type="String" value="org.eclipse.kura.floodingprotection.configuration.FloodingProtectionConfigurator"/>
    <service>
-      <provide interface="org.eclipse.kura.security.FloodingProtectionService"/>
+      <provide interface="org.eclipse.kura.security.IdsProtectionService"/>
       <provide interface="org.eclipse.kura.configuration.SelfConfiguringComponent"/>
    </service>
    <property name="kura.ui.service.hide" type="Boolean" value="true"/>

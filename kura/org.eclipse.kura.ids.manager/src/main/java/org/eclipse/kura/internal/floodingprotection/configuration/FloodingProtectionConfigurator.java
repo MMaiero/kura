@@ -24,12 +24,12 @@ import org.eclipse.kura.core.configuration.metatype.Tad;
 import org.eclipse.kura.core.configuration.metatype.Tocd;
 import org.eclipse.kura.core.configuration.metatype.Tscalar;
 import org.eclipse.kura.linux.net.iptables.LinuxFirewall;
-import org.eclipse.kura.security.FloodingProtectionService;
+import org.eclipse.kura.security.IdsProtectionService;
 import org.osgi.service.component.ComponentContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class FloodingProtectionConfigurator implements FloodingProtectionService, SelfConfiguringComponent {
+public class FloodingProtectionConfigurator implements IdsProtectionService, SelfConfiguringComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(FloodingProtectionConfigurator.class);
 
@@ -74,8 +74,7 @@ public class FloodingProtectionConfigurator implements FloodingProtectionService
         }
     }
 
-    @Override
-    public boolean isEnabled() {
+    private boolean isEnabled() {
 
         Object value = this.properties.get(FLOODING_PROTECTION_ENABLED_PROP_NAME);
         if (!isNull(value)) {
@@ -83,16 +82,6 @@ public class FloodingProtectionConfigurator implements FloodingProtectionService
         }
 
         return false;
-    }
-
-    @Override
-    public void enable() throws KuraException {
-        setStatus(true);
-    }
-
-    @Override
-    public void disable() throws KuraException {
-        setStatus(false);
     }
 
     private void setStatus(boolean status) throws KuraException {
@@ -130,7 +119,7 @@ public class FloodingProtectionConfigurator implements FloodingProtectionService
         tad.setType(Tscalar.BOOLEAN);
         tad.setRequired(true);
         tad.setDefault("false");
-        tad.setDescription("Enable/Disable login protection feature");
+        tad.setDescription("Enable/Disable flooding protection feature");
         tocd.addAD(tad);
 
         return tocd;

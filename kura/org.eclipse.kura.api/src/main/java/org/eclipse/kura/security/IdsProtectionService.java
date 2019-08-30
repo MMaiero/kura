@@ -11,7 +11,6 @@
  *******************************************************************************/
 package org.eclipse.kura.security;
 
-import org.eclipse.kura.KuraException;
 import org.osgi.annotation.versioning.ProviderType;
 
 /**
@@ -19,31 +18,6 @@ import org.osgi.annotation.versioning.ProviderType;
  * @since 2.2
  */
 @ProviderType
-public interface FloodingProtectionService {
-
-    /**
-     * Enables the protection
-     *
-     * @throws KuraException
-     *             if the operation fails
-     */
-    public void enable() throws KuraException;
-
-    /**
-     * Disables the protection
-     *
-     * @throws KuraException
-     *             if the operation fails
-     */
-    public void disable() throws KuraException;
-
-    /**
-     * Returns the service status
-     *
-     * @return true if the protection is enabled
-     * @throws KuraException
-     *             if the operation fails
-     */
-    public boolean isEnabled() throws KuraException;
+public interface IdsProtectionService {
 
 }

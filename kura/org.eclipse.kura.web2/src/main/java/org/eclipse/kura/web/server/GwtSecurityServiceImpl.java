@@ -15,12 +15,10 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 
 import org.eclipse.kura.KuraException;
-import org.eclipse.kura.security.FloodingProtectionService;
-import org.eclipse.kura.security.LoginDosProtectionService;
+import org.eclipse.kura.security.IdsProtectionService;
 import org.eclipse.kura.security.SecurityService;
 import org.eclipse.kura.web.server.util.ServiceLocator;
 import org.eclipse.kura.web.session.Attributes;
-import org.eclipse.kura.web.shared.GwtKuraErrorCode;
 import org.eclipse.kura.web.shared.GwtKuraException;
 import org.eclipse.kura.web.shared.model.GwtXSRFToken;
 import org.eclipse.kura.web.shared.service.GwtSecurityService;
@@ -111,94 +109,15 @@ public class GwtSecurityServiceImpl extends OsgiRemoteServiceServlet implements 
     @Override
     public boolean isIdsAvailable() {
 
-        return isLoginProtectionAvailable() || isFloodingProtectionAvailable();
-    }
-
-    @Override
-    public boolean isLoginProtectionAvailable() {
         try {
-            LoginDosProtectionService loginProtectionService = ServiceLocator.getInstance()
-                    .getService(LoginDosProtectionService.class);
-            if (loginProtectionService != null) {
+            IdsProtectionService idsProtectionService = ServiceLocator.getInstance()
+                    .getService(IdsProtectionService.class);
+            if (idsProtectionService != null) {
                 return true;
             }
         } catch (GwtKuraException e) {
             // No action
         }
         return false;
-    }
-
-    @Override
-    public boolean isFloodingProtectionAvailable() {
-        try {
-            FloodingProtectionService floodingProtectionService = ServiceLocator.getInstance()
-                    .getService(FloodingProtectionService.class);
-            if (floodingProtectionService != null) {
-                return true;
-            }
-        } catch (GwtKuraException e) {
-            // No action
-        }
-        return false;
-    }
-
-    @Override
-    public void setLoginProtectionStatus(GwtXSRFToken xsrfToken, boolean status) throws GwtKuraException {
-        checkXSRFToken(xsrfToken);
-
-        LoginDosProtectionService loginProtectionService = ServiceLocator.getInstance()
-                .getService(LoginDosProtectionService.class);
-        try {
-            if (status) {
-                loginProtectionService.enable();
-            } else {
-                loginProtectionService.disable();
-            }
-        } catch (KuraException e) {
-            throw new GwtKuraException(GwtKuraErrorCode.INTERNAL_ERROR, e);
-        }
-    }
-
-    @Override
-    public boolean getLoginProtectionStatus(GwtXSRFToken xsrfToken) throws GwtKuraException {
-        checkXSRFToken(xsrfToken);
-
-        LoginDosProtectionService loginProtectionService = ServiceLocator.getInstance()
-                .getService(LoginDosProtectionService.class);
-        try {
-            return loginProtectionService.isEnabled();
-        } catch (KuraException e) {
-            throw new GwtKuraException(GwtKuraErrorCode.INTERNAL_ERROR, e);
-        }
-    }
-
-    @Override
-    public void setFloodingProtectionStatus(GwtXSRFToken xsrfToken, boolean status) throws GwtKuraException {
-        checkXSRFToken(xsrfToken);
-
-        FloodingProtectionService floodingProtectionService = ServiceLocator.getInstance()
-                .getService(FloodingProtectionService.class);
-        try {
-            if (status) {
-                floodingProtectionService.enable();
-            } else {
-                floodingProtectionService.disable();
-            }
-        } catch (KuraException e) {
-            throw new GwtKuraException(GwtKuraErrorCode.INTERNAL_ERROR, e);
-        }
-    }
-
-    @Override
-    public boolean getFloodingProtectionStatus(GwtXSRFToken xsrfToken) throws GwtKuraException {
-        checkXSRFToken(xsrfToken);
-
-        FloodingProtectionService floodingProtectionService = ServiceLocator.getInstance()
-                .getService(FloodingProtectionService.class);
-        try {
-            return floodingProtectionService.isEnabled();
-        } catch (KuraException e) {
-            throw new GwtKuraException(GwtKuraErrorCode.INTERNAL_ERROR, e);
-        }
     }
 }

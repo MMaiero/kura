@@ -29,16 +29,4 @@ public interface GwtSecurityService extends RemoteService {
     public void reloadCommandLineFingerprint(GwtXSRFToken xsrfToken) throws GwtKuraException;
 
     public boolean isIdsAvailable();
-
-    public boolean isLoginProtectionAvailable();
-
-    public void setLoginProtectionStatus(GwtXSRFToken xsrfToken, boolean status) throws GwtKuraException;
-
-    public boolean getLoginProtectionStatus(GwtXSRFToken xsrfToken) throws GwtKuraException;
-
-    public boolean isFloodingProtectionAvailable();
-
-    public void setFloodingProtectionStatus(GwtXSRFToken xsrfToken, boolean status) throws GwtKuraException;
-
-    public boolean getFloodingProtectionStatus(GwtXSRFToken xsrfToken) throws GwtKuraException;
 }
