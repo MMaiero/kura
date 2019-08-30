@@ -48,15 +48,10 @@ public class IptablesConfig {
             "-A INPUT -p icmp -m icmp --icmp-type 8 -m state --state NEW,RELATED,ESTABLISHED -j ACCEPT",
             "-A OUTPUT -p icmp -m icmp --icmp-type 0 -m state --state RELATED,ESTABLISHED -j ACCEPT" };
 
-    private static final String[] DO_NOT_ALLOW_ICMP = {
-            "-A INPUT -p icmp -m icmp --icmp-type 8 -m state --state NEW,RELATED,ESTABLISHED -j DROP",
-            "-A OUTPUT -p icmp -m icmp --icmp-type 0 -m state --state RELATED,ESTABLISHED -j DROP" };
-
     private static final String[] FLOOD_PROTECTION_PREROUTING = {
             "-A PREROUTING -m conntrack --ctstate INVALID -j DROP",
             "-A PREROUTING -p tcp ! --syn -m conntrack --ctstate NEW -j DROP",
             "-A PREROUTING -p tcp -m conntrack --ctstate NEW -m tcpmss ! --mss 536:65535 -j DROP",
-            "-A PREROUTING -p tcp --tcp-flags FIN,SYN,RST,PSH,ACK,URG NONE -j DROP",
             "-A PREROUTING -p tcp --tcp-flags FIN,SYN FIN,SYN -j DROP",
             "-A PREROUTING -p tcp --tcp-flags SYN,RST SYN,RST -j DROP",
             "-A PREROUTING -p tcp --tcp-flags FIN,RST FIN,RST -j DROP",
@@ -232,30 +227,25 @@ public class IptablesConfig {
     public void save(String filename) throws KuraException {
         try (FileOutputStream fos = new FileOutputStream(FIREWALL_TMP_CONFIG_FILE_NAME);
                 PrintWriter writer = new PrintWriter(fos)) {
+            writer.println("*mangle");
             if (this.floodProtectionEnabled) {
-                writer.println("*mangle");
                 for (String floodProtection : FLOOD_PROTECTION_PREROUTING) {
                     writer.println(floodProtection);
                 }
-                writer.println(COMMIT_COMMAND);
             }
+            writer.println(COMMIT_COMMAND);
 
             writer.println(FILTER_SECTION_SEPARATOR);
             writer.println(ALLOW_ALL_TRAFFIC_TO_LOOPBACK);
             writer.println(ALLOW_ONLY_INCOMING_TO_OUTGOING);
-            // if (this.allowIcmp) {
-            // for (String sAllowIcmp : ALLOW_ICMP) {
-            // writer.println(sAllowIcmp);
-            // }
-            // } else {
-            // for (String sDoNotAllowIcmp : DO_NOT_ALLOW_ICMP) {
-            // writer.println(sDoNotAllowIcmp);
-            // }
-            // }
 
             if (this.floodProtectionEnabled) {
                 for (String floodProtection : FLOOD_PROTECTION) {
                     writer.println(floodProtection);
+                }
+            } else {
+                for (String sAllowIcmp : ALLOW_ICMP) {
+                    writer.println(sAllowIcmp);
                 }
             }
 
@@ -381,20 +371,12 @@ public class IptablesConfig {
                     }
                     for (String allowIcmpProto : ALLOW_ICMP) {
                         if (allowIcmpProto.equals(line)) {
-                            this.allowIcmp = true;
-                            continue lineloop;
-                        }
-                    }
-                    for (String allowIcmpProto : DO_NOT_ALLOW_ICMP) {
-                        if (allowIcmpProto.equals(line)) {
-                            this.allowIcmp = false;
                             continue lineloop;
                         }
                     }
 
                     for (String floodProtectionLine : FLOOD_PROTECTION) {
                         if (floodProtectionLine.equals(line)) {
-                            this.floodProtectionEnabled = true;
                             continue;
                         }
                     }

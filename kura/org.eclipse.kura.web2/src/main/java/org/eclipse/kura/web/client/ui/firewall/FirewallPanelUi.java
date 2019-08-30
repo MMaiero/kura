@@ -12,7 +12,9 @@
 package org.eclipse.kura.web.client.ui.firewall;
 
 import org.eclipse.kura.web.client.messages.Messages;
+import org.eclipse.kura.web.client.ui.EntryClassUi;
 import org.eclipse.kura.web.client.ui.Tab;
+import org.eclipse.kura.web.client.util.FailureHandler;
 import org.eclipse.kura.web.shared.service.GwtSecurityService;
 import org.eclipse.kura.web.shared.service.GwtSecurityServiceAsync;
 import org.gwtbootstrap3.client.ui.TabListItem;
@@ -79,7 +81,8 @@ public class FirewallPanelUi extends Composite {
 
             @Override
             public void onFailure(Throwable caught) {
-                // TODO Auto-generated method stub
+                EntryClassUi.hideWaitModal();
+                FailureHandler.handle(caught);
 
             }
         });

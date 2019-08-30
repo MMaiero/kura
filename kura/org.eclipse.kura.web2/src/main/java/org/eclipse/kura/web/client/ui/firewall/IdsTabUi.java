@@ -14,8 +14,6 @@ package org.eclipse.kura.web.client.ui.firewall;
 import static org.eclipse.kura.web.client.util.FilterBuilder.or;
 
 import java.util.Iterator;
-import java.util.List;
-import java.util.logging.Level;
 
 import org.eclipse.kura.web.client.messages.Messages;
 import org.eclipse.kura.web.client.ui.AbstractServicesUi;
@@ -23,9 +21,9 @@ import org.eclipse.kura.web.client.ui.EntryClassUi;
 import org.eclipse.kura.web.client.ui.Tab;
 import org.eclipse.kura.web.client.util.FailureHandler;
 import org.eclipse.kura.web.client.util.FilterBuilder;
+import org.eclipse.kura.web.client.util.request.RequestQueue;
 import org.eclipse.kura.web.shared.model.GwtConfigComponent;
 import org.eclipse.kura.web.shared.model.GwtConfigParameter;
-import org.eclipse.kura.web.shared.model.GwtXSRFToken;
 import org.eclipse.kura.web.shared.service.GwtComponentService;
 import org.eclipse.kura.web.shared.service.GwtComponentServiceAsync;
 import org.eclipse.kura.web.shared.service.GwtSecurityTokenService;
@@ -42,7 +40,6 @@ import org.gwtbootstrap3.client.ui.html.Span;
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.uibinder.client.UiBinder;
 import com.google.gwt.uibinder.client.UiField;
-import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.gwt.user.client.ui.Widget;
 
 public class IdsTabUi extends AbstractServicesUi implements Tab {
@@ -125,6 +122,7 @@ public class IdsTabUi extends AbstractServicesUi implements Tab {
         if (isDirty()) {
             this.notificationModalHeader.setTitle(MSGS.confirm());
 
+            this.notificationModalBody.clear();
             this.notificationModalBody
                     .add(new Span(MSGS.deviceConfigConfirmation(this.configurableComponent.getComponentName())));
 
@@ -141,43 +139,17 @@ public class IdsTabUi extends AbstractServicesUi implements Tab {
                     FailureHandler.handle(ex);
                     return;
                 }
-                this.gwtXSRFService.generateSecurityToken(new AsyncCallback<GwtXSRFToken>() {
-
-                    @Override
-                    public void onFailure(Throwable ex) {
-                        EntryClassUi.hideWaitModal();
-                        FailureHandler.handle(ex);
-                    }
-
-                    @Override
-                    public void onSuccess(GwtXSRFToken token) {
-                        IdsTabUi.this.gwtComponentService.updateComponentConfiguration(token,
-                                IdsTabUi.this.configurableComponent, new AsyncCallback<Void>() {
-
-                                    @Override
-                                    public void onFailure(Throwable caught) {
-                                        EntryClassUi.hideWaitModal();
-                                        FailureHandler.handle(caught);
-                                        errorLogger.log(Level.SEVERE,
-                                                caught.getLocalizedMessage() != null ? caught.getLocalizedMessage()
-                                                        : caught.getClass().getName(),
-                                                caught);
-                                    }
-
-                                    @Override
-                                    public void onSuccess(Void result) {
-                                        IdsTabUi.this.notificationModal.hide();
-                                        logger.info(MSGS.info() + ": " + MSGS.deviceConfigApplied());
-                                        IdsTabUi.this.apply.setEnabled(false);
-                                        IdsTabUi.this.reset.setEnabled(false);
-                                        setDirty(false);
-                                        IdsTabUi.this.originalConfig = IdsTabUi.this.configurableComponent;
-                                        EntryClassUi.hideWaitModal();
-                                    }
-                                });
-
-                    }
-                });
+                RequestQueue.submit(context -> this.gwtXSRFService.generateSecurityToken(
+                        context.callback(token -> IdsTabUi.this.gwtComponentService.updateComponentConfiguration(token,
+                                IdsTabUi.this.configurableComponent, context.callback(data -> {
+                                    IdsTabUi.this.notificationModal.hide();
+                                    logger.info(MSGS.info() + ": " + MSGS.deviceConfigApplied());
+                                    IdsTabUi.this.apply.setEnabled(false);
+                                    IdsTabUi.this.reset.setEnabled(false);
+                                    setDirty(false);
+                                    IdsTabUi.this.originalConfig = IdsTabUi.this.configurableComponent;
+                                    EntryClassUi.hideWaitModal();
+                                })))));
             });
 
             this.notificationModal.show();
@@ -203,6 +175,7 @@ public class IdsTabUi extends AbstractServicesUi implements Tab {
         if (isDirty()) {
             this.notificationModalHeader.setTitle(MSGS.confirm());
 
+            this.notificationModalBody.clear();
             this.notificationModalBody.add(new Span(MSGS.deviceConfigDirty()));
 
             this.cancelButton.setText(MSGS.noButton());
@@ -243,42 +216,21 @@ public class IdsTabUi extends AbstractServicesUi implements Tab {
 
     @Override
     public void refresh() {
-        this.gwtXSRFService.generateSecurityToken(new AsyncCallback<GwtXSRFToken>() {
+        RequestQueue.submit(context -> this.gwtXSRFService
+                .generateSecurityToken(context.callback(token -> IdsTabUi.this.gwtComponentService
+                        .findComponentConfigurations(token, SERVICES_FILTER, context.callback(data -> {
+                            if (!data.isEmpty()) {
+                                IdsTabUi.this.originalConfig = data.get(0);
+                                restoreConfiguration(IdsTabUi.this.originalConfig);
+                                IdsTabUi.this.fields.clear();
 
-            @Override
-            public void onFailure(Throwable ex) {
-                EntryClassUi.hideWaitModal();
-                FailureHandler.handle(ex);
-            }
+                                renderForm();
 
-            @Override
-            public void onSuccess(GwtXSRFToken token) {
-                IdsTabUi.this.gwtComponentService.findComponentConfigurations(token, SERVICES_FILTER,
-                        new AsyncCallback<List<GwtConfigComponent>>() {
-
-                            @Override
-                            public void onFailure(Throwable caught) {
-                                EntryClassUi.hideWaitModal();
-                                FailureHandler.handle(caught);
+                                setDirty(false);
+                                IdsTabUi.this.apply.setEnabled(false);
+                                IdsTabUi.this.reset.setEnabled(false);
                             }
-
-                            @Override
-                            public void onSuccess(List<GwtConfigComponent> gwtConfigComps) {
-                                if (!gwtConfigComps.isEmpty()) {
-                                    IdsTabUi.this.originalConfig = gwtConfigComps.get(0);
-                                    restoreConfiguration(IdsTabUi.this.originalConfig);
-                                    IdsTabUi.this.fields.clear();
-
-                                    renderForm();
-
-                                    setDirty(false);
-                                    IdsTabUi.this.apply.setEnabled(false);
-                                    IdsTabUi.this.reset.setEnabled(false);
-                                }
-                            }
-                        });
-            }
-        });
+                        })))));
 
     }
 }
