@@ -1,3 +1,5 @@
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FMMaiero%2Fkura.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2FMMaiero%2Fkura?ref=badge_shield)
+
 Eclipse Kura™
 =============
 An OSGi-based Application Framework for M2M Service Gateways
@@ -48,3 +50,7 @@ At first startup Eclipse IDE will checkout the code, perform a full build and co
 For further information, building and deployment instructions, please visit the [getting started page](https://wiki.eclipse.org/Kura/Getting_Started).
 
 To raise an issue, please report a bug on [GitHub issues](https://github.com/eclipse/kura/issues/new).
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FMMaiero%2Fkura.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2FMMaiero%2Fkura?ref=badge_large)
