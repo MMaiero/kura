@@ -67,7 +67,7 @@ public class CryptoServiceImpl implements CryptoService {
     private static final int AUTH_TAG_LENGTH_BIT = 128;
     private static final int IV_SIZE = 12;
     private static final byte[] SECRET_KEY = System
-            .getProperty("org.eclipse.kura.core.crypto.secretKey", "rv;ipse329183!@#").getBytes();
+            .getProperty("org.eclipse.kura.core.crypto.secretKey", "").getBytes();
     private static final String ENCRYPTED_STRING_SEPARATOR = "-";
 
     private String keystorePasswordPath;
@@ -95,13 +95,20 @@ public class CryptoServiceImpl implements CryptoService {
     public char[] encryptAes(char[] value) throws KuraException {
 
         try {
-            Key key = generateKey();
-            Cipher c = Cipher.getInstance(CIPHER);
             byte[] iv = new byte[IV_SIZE];
-            this.random.nextBytes(iv);
-            c.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(AUTH_TAG_LENGTH_BIT, iv));
-            byte[] encryptedBytes = c.doFinal(charArrayToByteArray(value));
             String ivString = base64Encode(iv);
+            byte[] encryptedBytes;
+            
+            if (SECRET_KEY.length != 0) {
+                Key key = generateKey();
+                Cipher c = Cipher.getInstance(CIPHER);
+                this.random.nextBytes(iv);
+                c.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(AUTH_TAG_LENGTH_BIT, iv));
+                encryptedBytes = c.doFinal(charArrayToByteArray(value));
+            } else {
+                logger.error("Encryption key not set. Working in unencrypted mode.");
+                encryptedBytes = charArrayToByteArray(value);
+            }
             String encryptedMessage = base64Encode(encryptedBytes);
 
             return (ivString + ENCRYPTED_STRING_SEPARATOR + encryptedMessage).toCharArray();
@@ -117,11 +124,22 @@ public class CryptoServiceImpl implements CryptoService {
 
     @Override
     public OutputStream aesEncryptingStream(OutputStream stream) throws KuraException {
+        byte[] iv = new byte[IV_SIZE];
+        if (SECRET_KEY.length == 0) {
+            logger.error("Encryption key not set. Working in unencrypted mode.");
+            try {
+                stream.write(base64Encode(iv).getBytes(StandardCharsets.UTF_8));
+                stream.write(ENCRYPTED_STRING_SEPARATOR.getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                throw new KuraException(KuraErrorCode.IO_ERROR, e);
+            }
+            return Base64.getEncoder().wrap(stream);
+        }
+
         try {
             Key key = generateKey();
             Cipher c = Cipher.getInstance(CIPHER);
 
-            byte[] iv = new byte[IV_SIZE];
             this.random.nextBytes(iv);
             c.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(AUTH_TAG_LENGTH_BIT, iv));
 
@@ -212,11 +230,17 @@ public class CryptoServiceImpl implements CryptoService {
             String encodedIv = internalStringValueArray[0];
             String encodedValue = internalStringValueArray[1];
 
-            byte[] iv = base64Decode(encodedIv);
             byte[] decodedValue = base64Decode(encodedValue);
             if (encryptedValue.length > 0 && decodedValue.length == 0) {
                 throw new KuraException(KuraErrorCode.DECODER_ERROR, VALUE_EXCEPTION_CAUSE);
             }
+
+            if (SECRET_KEY.length == 0) {
+                logger.error("Encryption key not set. Working in unencrypted mode.");
+                return byteArrayToCharArray(decodedValue);
+            }
+
+            byte[] iv = base64Decode(encodedIv);
 
             Cipher c = Cipher.getInstance(CIPHER);
             c.init(Cipher.DECRYPT_MODE, generateKey(), new GCMParameterSpec(AUTH_TAG_LENGTH_BIT, iv));
@@ -235,7 +259,6 @@ public class CryptoServiceImpl implements CryptoService {
     @Override
     public InputStream aesDecryptingStream(InputStream encryptedStream) throws KuraException {
         try {
-
             final BufferedInputStream buffered = new BufferedInputStream(encryptedStream);
 
             final ByteArrayOutputStream encodedIv = new ByteArrayOutputStream();
@@ -261,6 +284,11 @@ public class CryptoServiceImpl implements CryptoService {
             buffered.reset();
 
             final InputStream decodedStream = Base64.getDecoder().wrap(buffered);
+
+            if (SECRET_KEY.length == 0) {
+                logger.error("Encryption key not set. Working in unencrypted mode.");
+                return decodedStream;
+            }
 
             Cipher c = Cipher.getInstance(CIPHER);
             c.init(Cipher.DECRYPT_MODE, generateKey(), new GCMParameterSpec(AUTH_TAG_LENGTH_BIT, iv));
