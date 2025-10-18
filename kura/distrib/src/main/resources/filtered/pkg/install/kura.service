@@ -7,6 +7,7 @@ After=dbus.service
 User=kurad
 Group=kurad
 Type=forking
+Environment="KURA_CRYPTO_SECRET_KEY="
 ExecStart=/bin/sh ${kura.install.dir}/kura/bin/start_kura_background.sh
 ExecStopPost=/bin/sh -c 'if [ -f /tmp/watchdog ]; then echo w > `cat /tmp/watchdog`; fi'
 PIDFile=/var/run/kura.pid
