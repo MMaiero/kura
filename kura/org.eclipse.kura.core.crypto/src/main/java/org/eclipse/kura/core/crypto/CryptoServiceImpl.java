@@ -67,8 +67,9 @@ public class CryptoServiceImpl implements CryptoService {
     private static final int AUTH_TAG_LENGTH_BIT = 128;
     private static final int IV_SIZE = 12;
     private static final byte[] SECRET_KEY = System
-            .getProperty("org.eclipse.kura.core.crypto.secretKey", "").getBytes();
+            .getProperty("org.eclipse.kura.core.crypto.secretKey", "").getBytes(StandardCharsets.UTF_8);
     private static final String ENCRYPTED_STRING_SEPARATOR = "-";
+    private static final char[] DEFAULT_KEYSTORE_PASSWORD = "changeit".toCharArray();
 
     private String keystorePasswordPath;
 
@@ -91,7 +92,7 @@ public class CryptoServiceImpl implements CryptoService {
         this.keystorePasswordPath = this.systemService.getKuraDataDirectory() + File.separator + "store.save";
 
         if (!isEncryptionEnabled()) {
-            logger.error("Encryption key not configured. Data will be stored in base64 encoded format without encryption.");
+            logger.error("Encryption key not configured. Data will be stored without encryption.");
         }
     }
 
@@ -214,6 +215,22 @@ public class CryptoServiceImpl implements CryptoService {
         return Base64.getEncoder().encodeToString(encryptedBytes);
     }
 
+    private byte[] decodeIvIfPresent(String candidate) {
+        try {
+            byte[] iv = base64Decode(candidate);
+            if (iv.length == IV_SIZE) {
+                return iv;
+            }
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+        return null;
+    }
+
+    private static char[] defaultKeyStorePassword() {
+        return DEFAULT_KEYSTORE_PASSWORD.clone();
+    }
+
     @Override
     public char[] decryptAes(char[] encryptedValue) throws KuraException {
         if (encryptedValue.length == 0) {
@@ -222,16 +239,8 @@ public class CryptoServiceImpl implements CryptoService {
 
         String internalStringValue = new String(encryptedValue);
         String[] internalStringValueArray = internalStringValue.split(ENCRYPTED_STRING_SEPARATOR, 2);
-        boolean looksLikeEncrypted = false;
-
-        if (internalStringValueArray.length == 2) {
-            try {
-                byte[] iv = base64Decode(internalStringValueArray[0]);
-                looksLikeEncrypted = iv.length == IV_SIZE;
-            } catch (IllegalArgumentException e) {
-                looksLikeEncrypted = false;
-            }
-        }
+        byte[] ivCandidate = internalStringValueArray.length == 2 ? decodeIvIfPresent(internalStringValueArray[0]) : null;
+        boolean looksLikeEncrypted = ivCandidate != null;
 
         if (!isEncryptionEnabled()) {
             if (looksLikeEncrypted) {
@@ -243,20 +252,17 @@ public class CryptoServiceImpl implements CryptoService {
         }
 
         try {
-            if (internalStringValueArray.length != 2) {
+            if (!looksLikeEncrypted) {
                 throw new KuraException(KuraErrorCode.DECODER_ERROR, VALUE_EXCEPTION_CAUSE);
             }
-            String encodedIv = internalStringValueArray[0];
             String encodedValue = internalStringValueArray[1];
-
-            byte[] iv = base64Decode(encodedIv);
             byte[] decodedValue = base64Decode(encodedValue);
             if (encryptedValue.length > 0 && decodedValue.length == 0) {
                 throw new KuraException(KuraErrorCode.DECODER_ERROR, VALUE_EXCEPTION_CAUSE);
             }
 
             Cipher c = Cipher.getInstance(CIPHER);
-            c.init(Cipher.DECRYPT_MODE, generateKey(), new GCMParameterSpec(AUTH_TAG_LENGTH_BIT, iv));
+            c.init(Cipher.DECRYPT_MODE, generateKey(), new GCMParameterSpec(AUTH_TAG_LENGTH_BIT, ivCandidate));
             byte[] decryptedBytes = c.doFinal(decodedValue);
 
             return byteArrayToCharArray(decryptedBytes);
@@ -281,15 +287,9 @@ public class CryptoServiceImpl implements CryptoService {
                 encodedIv.write(b);
             }
 
-            boolean looksLikeEncrypted = false;
-            if (b == '-') {
-                try {
-                    byte[] iv = base64Decode(new String(encodedIv.toByteArray(), StandardCharsets.UTF_8));
-                    looksLikeEncrypted = iv.length == IV_SIZE;
-                } catch (IllegalArgumentException e) {
-                    looksLikeEncrypted = false;
-                }
-            }
+            String encodedIvString = new String(encodedIv.toByteArray(), StandardCharsets.UTF_8);
+            byte[] ivCandidate = b == '-' ? decodeIvIfPresent(encodedIvString) : null;
+            boolean looksLikeEncrypted = ivCandidate != null;
 
             if (!isEncryptionEnabled()) {
                 if (looksLikeEncrypted) {
@@ -322,8 +322,6 @@ public class CryptoServiceImpl implements CryptoService {
                 throw new KuraException(KuraErrorCode.DECODER_ERROR, VALUE_EXCEPTION_CAUSE);
             }
 
-            byte[] iv = base64Decode(new String(encodedIv.toByteArray(), StandardCharsets.UTF_8));
-
             buffered.mark(1);
 
             if (buffered.read() == -1) {
@@ -335,7 +333,7 @@ public class CryptoServiceImpl implements CryptoService {
             final InputStream decodedStream = Base64.getDecoder().wrap(buffered);
 
             Cipher c = Cipher.getInstance(CIPHER);
-            c.init(Cipher.DECRYPT_MODE, generateKey(), new GCMParameterSpec(AUTH_TAG_LENGTH_BIT, iv));
+            c.init(Cipher.DECRYPT_MODE, generateKey(), new GCMParameterSpec(AUTH_TAG_LENGTH_BIT, ivCandidate));
 
             return new CipherInputStream(decodedStream, c);
 
@@ -407,11 +405,11 @@ public class CryptoServiceImpl implements CryptoService {
     @Override
     public char[] getKeyStorePassword(String keyStorePath) {
         Properties props = new Properties();
-        char[] password = "changeit".toCharArray();
+        char[] password = defaultKeyStorePassword();
 
         File f = new File(this.keystorePasswordPath);
         if (!f.exists()) {
-            return "changeit".toCharArray();
+            return defaultKeyStorePassword();
         }
 
         try (FileInputStream fis = new FileInputStream(this.keystorePasswordPath);) {
