@@ -27,6 +27,7 @@ cd "$DIR" || exit 1
 
 IS_DEBUG_MODE="false"
 IS_DETACHED_MODE="false"
+IS_NOTIFY_MODE="false"
 
 while [[ $# -gt 0 ]]; do
     key="$1"
@@ -35,6 +36,9 @@ while [[ $# -gt 0 ]]; do
     -d | --detached)
         IS_DETACHED_MODE="true"
         ;;
+    -n | --notify)
+        IS_NOTIFY_MODE="true"
+        ;;
     -x | --debug)
         IS_DEBUG_MODE="true"
         ;;
@@ -42,6 +46,7 @@ while [[ $# -gt 0 ]]; do
         echo
         echo "Options:"
         echo "    -d | --detached    run Kura in detached mode"
+        echo "    -n | --notify     run Kura with sd_notify support (for systemd Type=notify)"
         echo "    -x | --debug       run Kura in debug mode"
         exit 0
         ;;
@@ -81,6 +86,11 @@ if [[ $IS_DETACHED_MODE == "true" ]]; then
     KURA_LAUNCH_COMMAND="nohup java"
 fi
 
+NOTIFY_OPTS=""
+if [[ $IS_NOTIFY_MODE == "true" ]] && [[ -n "$NOTIFY_SOCKET" ]]; then
+    NOTIFY_OPTS="-Dkura.systemd.notify=true"
+fi
+
 KURA_CMD="${KURA_LAUNCH_COMMAND} -Xms${kura.mem.size} -Xmx${kura.mem.size} \
     $DEBUG_OPTS \
     -XX:+IgnoreUnrecognizedVMOptions \
@@ -99,6 +109,7 @@ KURA_CMD="${KURA_LAUNCH_COMMAND} -Xms${kura.mem.size} -Xmx${kura.mem.size} \
     -Dlog4j2.disable.jmx=true \
     -Djdk.tls.trustNameService=true \
     -Declipse.consoleLog=true \
+    $NOTIFY_OPTS \
     -jar \${DIR}/plugins/org.eclipse.equinox.launcher-${org.eclipse.equinox.launcher.version}.jar \
     -configuration /tmp/.kura/configuration \
     $EQUINOX_DEBUG_OPTS"

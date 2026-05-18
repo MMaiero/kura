@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2023, 2024 Eurotech and/or its affiliates and others
+# Copyright (c) 2023, 2026 Eurotech and/or its affiliates and others
 #
 # This program and the accompanying materials are made
 # available under the terms of the Eclipse Public License 2.0
@@ -16,7 +16,11 @@ INSTALL_DIR=/opt/eclipse
 WD_TMP_FILE=/tmp/watchdog
 REFRESH_TIME=5
 TIMEOUT_TIME=300
-SYSTEMD_WATCHDOG_CONFIG="[Manager]
+# When using direct watchdog mode, systemd must not pet the hardware watchdog
+# since Kura will own /dev/watchdog exclusively.
+# When using systemd watchdog mode, systemd should manage the hardware watchdog
+# and this config should NOT be installed.
+SYSTEMD_WATCHDOG_DISABLE_CONFIG="[Manager]
 RuntimeWatchdogSec=0
 RebootWatchdogSec=0
 KExecWatchdogSec=0
@@ -67,7 +71,13 @@ function stopWatchdog {
 }
 
 function disable_systemd_watchdog() {
-    # disable systemd watchdog
+    # Disable systemd hardware watchdog management.
+    # This is needed only when using direct (/dev/watchdog) mode,
+    # because Kura will exclusively own the watchdog device and
+    # systemd's RuntimeWatchdogSec would conflict.
+    # When using systemd watchdog mode (watchdogMode=systemd), this
+    # should NOT be called, as systemd needs to manage the hardware watchdog.
+    #
     # https://manpages.debian.org/testing/systemd/systemd-system.conf.5.en.html
     #
     # Order of application of conf files:
@@ -88,7 +98,7 @@ function disable_systemd_watchdog() {
 
     if [ ! -z "${path}" ]; then
         echo "Installing $path/zz-kura-disable-watchdog.conf"
-        echo -e "${SYSTEMD_WATCHDOG_CONFIG}" > ${path}/zz-kura-disable-watchdog.conf
+        echo -e "${SYSTEMD_WATCHDOG_DISABLE_CONFIG}" > ${path}/zz-kura-disable-watchdog.conf
         chmod 644 ${path}/zz-kura-disable-watchdog.conf
         systemctl daemon-reload
     else
