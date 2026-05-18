@@ -21,5 +21,7 @@ public interface WatchdogStrategy {
 
     void disable();
 
+    void trigger();
+
     int getHardwareTimeout();
 }

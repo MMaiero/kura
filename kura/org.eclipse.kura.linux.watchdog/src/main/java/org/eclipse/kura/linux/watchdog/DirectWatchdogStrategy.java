@@ -121,6 +121,10 @@ public class DirectWatchdogStrategy implements WatchdogStrategy {
         }
     }
 
+    @Override
+    public void trigger() {
+    }
+
     private void runCommand(String command) throws IOException, InterruptedException {
         Process proc = Runtime.getRuntime().exec(command);
         int exitCode = proc.waitFor();

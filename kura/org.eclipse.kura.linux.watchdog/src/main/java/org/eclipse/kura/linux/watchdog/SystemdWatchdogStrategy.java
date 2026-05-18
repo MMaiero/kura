@@ -18,6 +18,7 @@ import java.net.StandardProtocolFamily;
 import java.net.UnixDomainSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
+import java.nio.charset.StandardCharsets;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,13 +51,21 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
 
         String watchdogPidStr = System.getenv(WATCHDOG_PID_ENV);
         if (watchdogPidStr != null) {
-            long expectedPid = Long.parseLong(watchdogPidStr);
-            long currentPid = ProcessHandle.current().pid();
-            if (expectedPid != currentPid) {
-                logger.warn(
-                        "WATCHDOG_PID ({}) does not match current PID ({}). "
-                                + "Running in degraded mode: the watchdog environment was intended for a different process.",
-                        expectedPid, currentPid);
+            try {
+                long expectedPid = Long.parseLong(watchdogPidStr);
+                long currentPid = ProcessHandle.current().pid();
+                if (expectedPid != currentPid) {
+                    logger.warn(
+                            "WATCHDOG_PID ({}) does not match current PID ({}). "
+                                    + "Running in degraded mode: the watchdog environment was intended "
+                                    + "for a different process.",
+                            expectedPid, currentPid);
+                    this.degraded = true;
+                    return;
+                }
+            } catch (NumberFormatException e) {
+                logger.warn("WATCHDOG_PID environment variable is not a valid number: '{}'. "
+                        + "Running in degraded mode.", watchdogPidStr, e);
                 this.degraded = true;
                 return;
             }
@@ -64,9 +73,14 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
 
         String watchdogUsecStr = System.getenv(WATCHDOG_USEC_ENV);
         if (watchdogUsecStr != null) {
-            this.watchdogUsec = Long.parseLong(watchdogUsecStr);
-            logger.info("systemd watchdog timeout set to {} usec ({} msec)", this.watchdogUsec,
-                    this.watchdogUsec / 1000);
+            try {
+                this.watchdogUsec = Long.parseLong(watchdogUsecStr);
+                logger.info("systemd watchdog timeout set to {} usec ({} msec)", this.watchdogUsec,
+                        this.watchdogUsec / 1000);
+            } catch (NumberFormatException e) {
+                logger.warn("WATCHDOG_USEC environment variable is not a valid number: '{}'. "
+                        + "Watchdog timeout will not be available.", watchdogUsecStr, e);
+            }
         }
 
         String socketPath = notifySocketPath;
@@ -106,7 +120,8 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
         return 0;
     }
 
-    void triggerWatchdog() {
+    @Override
+    public void trigger() {
         sendNotify("WATCHDOG=trigger\n");
     }
 
@@ -129,7 +144,7 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
         }
 
         try {
-            ByteBuffer buffer = ByteBuffer.wrap(message.getBytes("UTF-8"));
+            ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
             this.notifyChannel.send(buffer, this.notifyAddress);
             logger.debug("Sent notification: {}", message.trim());
         } catch (IOException e) {

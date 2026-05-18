@@ -199,8 +199,8 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
                         this.options.getRebootCauseFilePath());
                 rebootCauseWriter.writeRebootCause(ccr.getCriticalComponentName());
 
-                if (this.watchdogStrategy instanceof SystemdWatchdogStrategy) {
-                    ((SystemdWatchdogStrategy) this.watchdogStrategy).triggerWatchdog();
+                if (this.watchdogStrategy != null) {
+                    this.watchdogStrategy.trigger();
                 }
 
                 try {

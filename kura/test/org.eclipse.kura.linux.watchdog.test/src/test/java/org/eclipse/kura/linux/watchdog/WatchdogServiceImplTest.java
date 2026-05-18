@@ -83,11 +83,16 @@ public class WatchdogServiceImplTest {
 
     public class TestWatchdogServiceImpl extends WatchdogServiceImpl {
 
+        private final Writer testWriter;
         private volatile boolean hasCheckedCriticalComponents;
+
+        public TestWatchdogServiceImpl(Writer testWriter) {
+            this.testWriter = testWriter;
+        }
 
         @Override
         protected WatchdogStrategy createWatchdogStrategy(WatchdogMode mode) {
-            return new TestDirectWatchdogStrategy(new StringWriter());
+            return new TestDirectWatchdogStrategy(this.testWriter);
         }
 
         @Override
@@ -109,34 +114,17 @@ public class WatchdogServiceImplTest {
         }
     }
 
-    private class DirectTestWatchdogServiceImpl extends WatchdogServiceImpl {
-
-        private final Writer testWriter;
-
-        public DirectTestWatchdogServiceImpl(Writer testWriter) {
-            this.testWriter = testWriter;
-        }
-
-        @Override
-        protected WatchdogStrategy createWatchdogStrategy(WatchdogMode mode) {
-            return new TestDirectWatchdogStrategy(this.testWriter);
-        }
-
-        @Override
-        protected synchronized void checkCriticalComponents() {
-            super.checkCriticalComponents();
-        }
-    }
-
     @Test
     public void testActivateDeactivate() throws NoSuchFieldException, IOException, InterruptedException {
         final WatchdogTestWriter watchdogWriter = new WatchdogTestWriter();
-        DirectTestWatchdogServiceImpl svc = new DirectTestWatchdogServiceImpl(watchdogWriter);
+        TestWatchdogServiceImpl svc = new TestWatchdogServiceImpl(watchdogWriter);
 
         Map<String, Object> properties = getProperties(true);
         svc.activate(properties);
 
-        Thread.sleep(1000);
+        assertTrue(svc.waitForCriticalComponentCheck(10000));
+        assertTrue(watchdogWriter.waitForData(10000));
+        assertTrue(watchdogWriter.toString().contains("w"));
 
         assertNotNull(TestUtil.getFieldValue(svc, "pollExecutor"));
 
@@ -152,7 +140,7 @@ public class WatchdogServiceImplTest {
         assertNull(TestUtil.getFieldValue(svc, "pollExecutor"));
 
         assertTrue(watchdogWriter.waitForData(10000));
-        assertTrue(watchdogWriter.toString().contains("w"));
+        assertTrue(watchdogWriter.toString().endsWith("V"));
     }
 
     private Map<String, Object> getProperties(boolean enabled) {
@@ -168,8 +156,7 @@ public class WatchdogServiceImplTest {
     @Test
     public void testUpdatedDisabled() throws IOException, NoSuchFieldException {
         final WatchdogTestWriter watchdogWriter = new WatchdogTestWriter();
-
-        DirectTestWatchdogServiceImpl svc = new DirectTestWatchdogServiceImpl(watchdogWriter);
+        TestWatchdogServiceImpl svc = new TestWatchdogServiceImpl(watchdogWriter);
 
         Map<String, Object> properties = getProperties(false);
 

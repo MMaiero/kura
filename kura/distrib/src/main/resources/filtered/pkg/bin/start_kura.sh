@@ -86,11 +86,6 @@ if [[ $IS_DETACHED_MODE == "true" ]]; then
     KURA_LAUNCH_COMMAND="nohup java"
 fi
 
-NOTIFY_OPTS=""
-if [[ $IS_NOTIFY_MODE == "true" ]] && [[ -n "$NOTIFY_SOCKET" ]]; then
-    NOTIFY_OPTS="-Dkura.systemd.notify=true"
-fi
-
 KURA_CMD="${KURA_LAUNCH_COMMAND} -Xms${kura.mem.size} -Xmx${kura.mem.size} \
     $DEBUG_OPTS \
     -XX:+IgnoreUnrecognizedVMOptions \
@@ -109,7 +104,6 @@ KURA_CMD="${KURA_LAUNCH_COMMAND} -Xms${kura.mem.size} -Xmx${kura.mem.size} \
     -Dlog4j2.disable.jmx=true \
     -Djdk.tls.trustNameService=true \
     -Declipse.consoleLog=true \
-    $NOTIFY_OPTS \
     -jar \${DIR}/plugins/org.eclipse.equinox.launcher-${org.eclipse.equinox.launcher.version}.jar \
     -configuration /tmp/.kura/configuration \
     $EQUINOX_DEBUG_OPTS"
