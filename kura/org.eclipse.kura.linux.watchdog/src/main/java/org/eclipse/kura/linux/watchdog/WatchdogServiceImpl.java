@@ -78,16 +78,11 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
     }
 
     private void doUpdate(WatchdogServiceOptions newOptions) {
-        if (!newOptions.isEnabled()) {
-            this.options = newOptions;
-            return;
-        }
-
         this.timedOutOn = null;
         this.options = newOptions;
 
         WatchdogMode mode = newOptions.getWatchdogMode();
-        logger.info("Initializing watchdog strategy: {}", mode.getValue());
+        logger.info("Initializing watchdog strategy: {} (enabled={})", mode.getValue(), newOptions.isEnabled());
 
         try {
             this.watchdogStrategy = createWatchdogStrategy(mode);
@@ -126,8 +121,17 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
 
         this.pollTask = this.pollExecutor.scheduleAtFixedRate(() -> {
             Thread.currentThread().setName("WatchdogServiceImpl");
-            checkCriticalComponents();
+            doTick();
         }, 0, this.options.getPingInterval(), TimeUnit.MILLISECONDS);
+    }
+
+    private void doTick() {
+        if (this.options != null && this.options.isEnabled()) {
+            checkCriticalComponents();
+        } else if (this.watchdogStrategy != null) {
+            logger.debug("Refreshing watchdog (passive mode).");
+            this.watchdogStrategy.refresh();
+        }
     }
 
     protected WatchdogStrategy createWatchdogStrategy(WatchdogMode mode) {
