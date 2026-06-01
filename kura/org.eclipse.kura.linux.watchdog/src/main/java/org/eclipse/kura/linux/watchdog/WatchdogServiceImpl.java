@@ -47,6 +47,7 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
     private ScheduledFuture<?> pollTask;
     private WatchdogServiceOptions options;
     private WatchdogStrategy watchdogStrategy;
+    private WatchdogMode activeMode;
 
     protected void activate(Map<String, Object> properties) {
         this.criticalComponentRegistrations = new CopyOnWriteArrayList<>();
@@ -66,6 +67,13 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
 
     public void updated(Map<String, Object> properties) {
         WatchdogServiceOptions newOptions = new WatchdogServiceOptions(properties);
+
+        if (this.pollTask != null && !this.pollTask.isCancelled()
+                && this.activeMode == newOptions.getWatchdogMode()
+                && this.options != null && this.options.isEnabled() == newOptions.isEnabled()) {
+            logger.info("Watchdog configuration unchanged. Keeping current strategy.");
+            return;
+        }
 
         this.pollExecutor.submit(() -> {
             Thread.currentThread().setName("WatchdogServiceImpl");
@@ -118,6 +126,8 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
                 logger.warn("Unable to write watchdog enabled temporary file. Continuing anyway", e);
             }
         }
+
+        this.activeMode = mode;
 
         this.pollTask = this.pollExecutor.scheduleAtFixedRate(() -> {
             Thread.currentThread().setName("WatchdogServiceImpl");
