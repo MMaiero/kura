@@ -55,19 +55,15 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
                 long expectedPid = Long.parseLong(watchdogPidStr);
                 long currentPid = ProcessHandle.current().pid();
                 if (expectedPid != currentPid) {
-                    logger.warn(
+                    logger.debug(
                             "WATCHDOG_PID ({}) does not match current PID ({}). "
-                                    + "Running in degraded mode: the watchdog environment was intended "
-                                    + "for a different process.",
+                                    + "This is expected for forking services. "
+                                    + "The notify socket will still be used for watchdog pings.",
                             expectedPid, currentPid);
-                    this.degraded = true;
-                    return;
                 }
             } catch (NumberFormatException e) {
-                logger.warn("WATCHDOG_PID environment variable is not a valid number: '{}'. "
-                        + "Running in degraded mode.", watchdogPidStr, e);
-                this.degraded = true;
-                return;
+                logger.debug("WATCHDOG_PID environment variable is not a valid number: '{}'. Ignoring.",
+                        watchdogPidStr, e);
             }
         }
 
