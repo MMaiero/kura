@@ -86,8 +86,17 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
     }
 
     private void doUpdate(WatchdogServiceOptions newOptions) {
+        boolean wasDisabled = this.options == null || !this.options.isEnabled();
         this.timedOutOn = null;
         this.options = newOptions;
+
+        if (wasDisabled && newOptions.isEnabled()) {
+            logger.info("Watchdog enabled. Resetting check-in times for {} critical component(s).",
+                    this.criticalComponentRegistrations.size());
+            for (CriticalComponentRegistration ccr : this.criticalComponentRegistrations) {
+                ccr.update();
+            }
+        }
 
         WatchdogMode mode = newOptions.getWatchdogMode();
         logger.info("Initializing watchdog strategy: {} (enabled={})", mode.getValue(), newOptions.isEnabled());
