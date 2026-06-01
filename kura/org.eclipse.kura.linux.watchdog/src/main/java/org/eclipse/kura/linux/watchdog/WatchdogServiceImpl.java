@@ -93,8 +93,27 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
             this.watchdogStrategy = createWatchdogStrategy(mode);
             this.watchdogStrategy.activate(newOptions);
         } catch (Exception e) {
-            logger.error("Failed to activate watchdog strategy: {}", mode.getValue(), e);
-            return;
+            logger.warn("Failed to activate watchdog strategy '{}'. Attempting fallback.", mode.getValue(), e);
+            this.watchdogStrategy = null;
+        }
+
+        if (this.watchdogStrategy != null && this.watchdogStrategy.isDegraded()) {
+            logger.warn(
+                    "Watchdog strategy '{}' is running in degraded mode. Attempting fallback to direct strategy.",
+                    mode.getValue());
+            this.watchdogStrategy = null;
+        }
+
+        if (this.watchdogStrategy == null) {
+            try {
+                logger.info("Falling back to direct watchdog strategy.");
+                this.watchdogStrategy = new DirectWatchdogStrategy();
+                this.watchdogStrategy.activate(newOptions);
+                mode = WatchdogMode.DIRECT;
+            } catch (Exception e) {
+                logger.error("Failed to activate fallback direct watchdog strategy", e);
+                return;
+            }
         }
 
         if (mode == WatchdogMode.DIRECT) {

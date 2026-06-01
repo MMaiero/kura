@@ -7,6 +7,8 @@ After=dbus.service,docker.service
 User=kurad
 Group=kurad
 Type=forking
+NotifyAccess=all
+WatchdogSec=60
 ExecStart=/bin/bash ${kura.install.dir}/kura/bin/start_kura.sh --detached
 ExecStopPost=/bin/bash -c 'if [ -f /tmp/watchdog ]; then echo w > `cat /tmp/watchdog`; fi'
 PIDFile=/var/run/kura.pid
@@ -15,14 +17,6 @@ RestartSec=5
 SuccessExitStatus=143
 KillMode=process
 AmbientCapabilities=cap_dac_override cap_dac_read_search cap_net_bind_service cap_sys_boot cap_kill cap_sys_module cap_sys_time cap_sys_tty_config cap_syslog
-
-# When using systemd watchdog mode (watchdogMode=systemd in Kura configuration),
-# uncomment the following lines and change Type to notify:
-# Type=notify
-# NotifyAccess=all
-# WatchdogSec=60
-# Remove PIDFile and ExecStopPost lines above when using Type=notify
-# Also remove --detached from ExecStart and add --notify flag
 
 [Install]
 WantedBy=multi-user.target

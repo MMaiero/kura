@@ -129,7 +129,8 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
         sendNotify("READY=1\n");
     }
 
-    boolean isDegraded() {
+    @Override
+    public boolean isDegraded() {
         return this.degraded;
     }
 

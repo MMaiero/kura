@@ -63,22 +63,23 @@ function stopWatchdog {
     fi
 }
 
-function restore_systemd_watchdog() {
-    file_to_restore=""
+function remove_systemd_watchdog_config() {
+    # Remove Kura's systemd watchdog config (both legacy disable from Kura <=5
+    # and the enable config from Kura 6).
+    removed=""
+    for dir in /usr/lib/systemd/system.conf.d /usr/local/lib/systemd/system.conf.d /etc/systemd/system.conf.d; do
+        if [ -d "${dir}" ]; then
+            for conf in zz-kura-disable-watchdog.conf zz-kura-enable-watchdog.conf; do
+                if [ -f "${dir}/${conf}" ]; then
+                    echo "Removing systemd watchdog config: ${dir}/${conf}"
+                    rm "${dir}/${conf}"
+                    removed="true"
+                fi
+            done
+        fi
+    done
 
-    if [ -f /usr/lib/systemd/system.conf.d/zz-kura-disable-watchdog.conf ]; then
-        file_to_restore="/usr/lib/systemd/system.conf.d/zz-kura-disable-watchdog.conf"
-    fi
-    if [ -f /usr/local/lib/systemd/system.conf.d/zz-kura-disable-watchdog.conf ]; then
-        file_to_restore="/usr/local/lib/systemd/system.conf.d/zz-kura-disable-watchdog.conf"
-    fi
-    if [ -f /etc/systemd/system.conf.d/zz-kura-disable-watchdog.conf ]; then
-        file_to_restore="/etc/systemd/system.conf.d/zz-kura-disable-watchdog.conf"
-    fi
-
-    if [ ! -z "${file_to_restore}" ]; then
-        echo "Restoring systemd watchdog configuration: removing ${file_to_restore}"
-        rm "${file_to_restore}"
+    if [ ! -z "${removed}" ]; then
         systemctl daemon-reload
     fi
 }
@@ -120,7 +121,7 @@ function preRemove {
       rm -rf $PARENT
     fi
 
-    restore_systemd_watchdog
+    remove_systemd_watchdog_config
 }
 ##############################################
 # END UTILITY FUNCTIONS

@@ -16,15 +16,17 @@ INSTALL_DIR=/opt/eclipse
 WD_TMP_FILE=/tmp/watchdog
 REFRESH_TIME=5
 TIMEOUT_TIME=300
-# When using direct watchdog mode, systemd must not pet the hardware watchdog
-# since Kura will own /dev/watchdog exclusively.
-# When using systemd watchdog mode, systemd should manage the hardware watchdog
-# and this config should NOT be installed.
-SYSTEMD_WATCHDOG_DISABLE_CONFIG="[Manager]
-RuntimeWatchdogSec=0
-RebootWatchdogSec=0
-KExecWatchdogSec=0
+# Kura 6 uses systemd watchdog (sd_notify) by default. Systemd PID1 must
+# manage the hardware watchdog so that multiple services can share the
+# resource. This drop-in enables RuntimeWatchdogSec at PID1 level.
+SYSTEMD_WATCHDOG_ENABLE_CONFIG="[Manager]
+RuntimeWatchdogSec=60
+RebootWatchdogSec=60
+KExecWatchdogSec=60
 "
+# Legacy config from Kura <=5 that disabled systemd watchdog.
+# Must be removed on install to prevent conflicts.
+SYSTEMD_WATCHDOG_DISABLE_FILE="zz-kura-disable-watchdog.conf"
 
 ##############################################
 # UTILITY FUNCTIONS
@@ -70,22 +72,13 @@ function stopWatchdog {
     fi
 }
 
-function disable_systemd_watchdog() {
-    # Disable systemd hardware watchdog management.
-    # This is needed only when using direct (/dev/watchdog) mode,
-    # because Kura will exclusively own the watchdog device and
-    # systemd's RuntimeWatchdogSec would conflict.
-    # When using systemd watchdog mode (watchdogMode=systemd), this
-    # should NOT be called, as systemd needs to manage the hardware watchdog.
+function ensure_systemd_watchdog() {
+    # Kura 6 uses systemd watchdog (sd_notify) by default.
+    # Enable systemd's hardware watchdog management at PID1 level
+    # so that /dev/watchdog is shared among all services.
+    # Also remove any legacy disable config from Kura <=5.
     #
     # https://manpages.debian.org/testing/systemd/systemd-system.conf.5.en.html
-    #
-    # Order of application of conf files:
-    # 1. /usr/lib/systemd/system.conf.d/
-    # 2. /usr/local/lib/systemd/system.conf.d/
-    # 3. /etc/systemd/system.conf.d/
-    # docs suggest to use 10-40 priority for drop-ins in /usr/, and 50-90 for /etc/
-    # we use zz since some OSs do not respect that convention (raspbian, ubuntu jammy)
     #
     path=""
     if [ -d /usr/lib/systemd/system.conf.d/ ]; then
@@ -93,16 +86,23 @@ function disable_systemd_watchdog() {
     elif [ -d /usr/local/lib/systemd/system.conf.d/ ]; then
         path="/usr/local/lib/systemd/system.conf.d"
     elif [ -d /etc/systemd/system.conf.d/ ]; then
-        path="/etc/systemd/system.conf.d"        
+        path="/etc/systemd/system.conf.d"
     fi
 
     if [ ! -z "${path}" ]; then
-        echo "Installing $path/zz-kura-disable-watchdog.conf"
-        echo -e "${SYSTEMD_WATCHDOG_DISABLE_CONFIG}" > ${path}/zz-kura-disable-watchdog.conf
-        chmod 644 ${path}/zz-kura-disable-watchdog.conf
+        # Remove legacy disable config from Kura <=5 if present
+        if [ -f "${path}/${SYSTEMD_WATCHDOG_DISABLE_FILE}" ]; then
+            echo "Removing legacy systemd watchdog disable config: ${path}/${SYSTEMD_WATCHDOG_DISABLE_FILE}"
+            rm -f "${path}/${SYSTEMD_WATCHDOG_DISABLE_FILE}"
+        fi
+
+        # Enable systemd hardware watchdog for PID1
+        echo "Enabling systemd hardware watchdog management (RuntimeWatchdogSec=60)"
+        echo -e "${SYSTEMD_WATCHDOG_ENABLE_CONFIG}" > ${path}/zz-kura-enable-watchdog.conf
+        chmod 644 ${path}/zz-kura-enable-watchdog.conf
         systemctl daemon-reload
     else
-        echo "No systemd drop-in directory found, watchdog not disabled"
+        echo "No systemd drop-in directory found, systemd watchdog not configured"
     fi
 }
 
@@ -142,7 +142,7 @@ if [ -f "/var/run/kura.pid" ] ; then
   done
 fi
 
-disable_systemd_watchdog
+ensure_systemd_watchdog
 runPreInstall
 ##############################################
 # END PRE-INSTALL SCRIPT

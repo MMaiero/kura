@@ -39,7 +39,7 @@ public class WatchdogServiceOptions {
                     }
                 }
             }
-            return DIRECT;
+            return SYSTEMD;
         }
     }
 
@@ -52,7 +52,7 @@ public class WatchdogServiceOptions {
     private static final ConfigurationProperty<String> PROPERTY_REBOOT_CAUSE_FILE_PATH = new ConfigurationProperty<>(
             "rebootCauseFilePath", "/opt/eclipse/kura/data/kura-reboot-cause");
     private static final ConfigurationProperty<String> PROPERTY_WATCHDOG_MODE = new ConfigurationProperty<>(
-            "watchdogMode", "direct");
+            "watchdogMode", "systemd");
 
     private static final String WD_ENABLED_TEMPORARY_FILE_PATH = "/tmp/watchdog";
 

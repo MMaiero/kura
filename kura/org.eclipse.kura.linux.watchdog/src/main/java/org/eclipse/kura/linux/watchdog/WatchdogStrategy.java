@@ -24,4 +24,8 @@ public interface WatchdogStrategy {
     void trigger();
 
     int getHardwareTimeout();
+
+    default boolean isDegraded() {
+        return false;
+    }
 }

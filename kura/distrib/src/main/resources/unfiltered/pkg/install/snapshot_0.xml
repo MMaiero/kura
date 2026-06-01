@@ -26,7 +26,7 @@
                 <esf:value>10000</esf:value>
             </esf:property>
             <esf:property name="watchdogMode" array="false" encrypted="false" type="String">
-                <esf:value>direct</esf:value>
+                <esf:value>systemd</esf:value>
             </esf:property>
         </esf:properties>
     </esf:configuration>

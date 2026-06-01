@@ -41,10 +41,10 @@
             type="String"
             cardinality="0"
             required="true"
-            default="direct"
-            description="Selects the watchdog strategy. 'direct' opens /dev/watchdog directly (exclusive, legacy mode). 'systemd' uses the sd_notify protocol via NOTIFY_SOCKET to let systemd manage the hardware watchdog (recommended for systemd environments, allows resource sharing).">
-            <Option label="Direct (/dev/watchdog)" value="direct"/>
+            default="systemd"
+            description="Selects the watchdog strategy. 'systemd' (default) uses the sd_notify protocol via NOTIFY_SOCKET to let systemd manage the hardware watchdog, allowing resource sharing. Falls back automatically to 'direct' if NOTIFY_SOCKET is not available. 'direct' opens /dev/watchdog directly (exclusive mode, for non-systemd environments).">
             <Option label="systemd (sd_notify)" value="systemd"/>
+            <Option label="Direct (/dev/watchdog)" value="direct"/>
         </AD>
 
         <AD id="watchdogDevice"

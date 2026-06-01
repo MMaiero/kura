@@ -301,7 +301,7 @@ public class WatchdogServiceImplTest {
         assertEquals(Integer.valueOf(10000), options.getPingInterval());
         assertEquals("/dev/watchdog", options.getWatchdogDevice());
         assertEquals("/opt/eclipse/kura/data/kura-reboot-cause", options.getRebootCauseFilePath());
-        assertEquals(WatchdogMode.DIRECT, options.getWatchdogMode());
+        assertEquals(WatchdogMode.SYSTEMD, options.getWatchdogMode());
     }
 
     @Test
@@ -323,12 +323,12 @@ public class WatchdogServiceImplTest {
     }
 
     @Test
-    public void testWatchdogServiceOptionsInvalidModeFallsBackToDirect() {
+    public void testWatchdogServiceOptionsInvalidModeFallsBackToSystemd() {
         Map<String, Object> properties = new HashMap<>();
         properties.put("watchdogMode", "invalid");
 
         WatchdogServiceOptions options = new WatchdogServiceOptions(properties);
-        assertEquals(WatchdogMode.DIRECT, options.getWatchdogMode());
+        assertEquals(WatchdogMode.SYSTEMD, options.getWatchdogMode());
     }
 
     @Test
@@ -347,12 +347,37 @@ public class WatchdogServiceImplTest {
     }
 
     @Test
+    public void testAutoFallbackSystemdToDirect() throws NoSuchFieldException, IOException, InterruptedException {
+        final WatchdogTestWriter watchdogWriter = new WatchdogTestWriter();
+
+        WatchdogServiceImpl svc = new WatchdogServiceImpl() {
+            @Override
+            protected WatchdogStrategy createWatchdogStrategy(WatchdogMode mode) {
+                if (mode == WatchdogMode.DIRECT) {
+                    return new TestDirectWatchdogStrategy(watchdogWriter);
+                }
+                return super.createWatchdogStrategy(mode);
+            }
+        };
+
+        Map<String, Object> properties = getProperties(true);
+        svc.activate(properties);
+
+        Thread.sleep(500);
+
+        assertTrue(watchdogWriter.waitForData(5000));
+        assertTrue(watchdogWriter.toString().contains("w"));
+
+        svc.deactivate();
+    }
+
+    @Test
     public void testWatchdogModeFromString() {
         assertEquals(WatchdogMode.DIRECT, WatchdogMode.fromString("direct"));
         assertEquals(WatchdogMode.SYSTEMD, WatchdogMode.fromString("systemd"));
         assertEquals(WatchdogMode.SYSTEMD, WatchdogMode.fromString("SYSTEMD"));
-        assertEquals(WatchdogMode.DIRECT, WatchdogMode.fromString("invalid"));
-        assertEquals(WatchdogMode.DIRECT, WatchdogMode.fromString(null));
+        assertEquals(WatchdogMode.SYSTEMD, WatchdogMode.fromString("invalid"));
+        assertEquals(WatchdogMode.SYSTEMD, WatchdogMode.fromString(null));
     }
 }
 
