@@ -14,6 +14,7 @@
 package org.eclipse.kura.linux.watchdog;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -114,6 +115,8 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
         return this.watchdogUsec;
     }
 
+    private static final long SYSTEMD_NOTIFY_TIMEOUT_SEC = 5;
+
     private void sendNotify(String message) {
         if (this.degraded) {
             return;
@@ -121,12 +124,17 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
 
         try {
             Process proc = new ProcessBuilder(SYSTEMD_NOTIFY_CMD, message).start();
-            int exitCode = proc.waitFor();
-            if (exitCode != 0) {
-                logger.warn("systemd-notify failed with exit code {} for: {}", exitCode, message);
+            boolean finished = proc.waitFor(SYSTEMD_NOTIFY_TIMEOUT_SEC, TimeUnit.SECONDS);
+            if (!finished) {
+                proc.destroyForcibly();
+                logger.warn("systemd-notify timed out for: {}", message);
+            } else if (proc.exitValue() != 0) {
+                logger.warn("systemd-notify failed with exit code {} for: {}", proc.exitValue(), message);
             } else {
                 logger.debug("Sent notification: {}", message);
             }
+            proc.getInputStream().close();
+            proc.getErrorStream().close();
         } catch (IOException e) {
             logger.error("Failed to invoke systemd-notify for: {}", message, e);
         } catch (InterruptedException e) {
