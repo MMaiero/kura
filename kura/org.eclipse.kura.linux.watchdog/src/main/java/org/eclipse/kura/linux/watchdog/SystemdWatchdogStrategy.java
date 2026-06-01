@@ -31,6 +31,7 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
 
     private long watchdogUsec;
     private boolean degraded;
+    private String pidArg;
 
     @Override
     public void activate(WatchdogServiceOptions options) throws Exception {
@@ -74,6 +75,8 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
                         + "Watchdog timeout will not be available.", watchdogUsecStr, e);
             }
         }
+
+        this.pidArg = "--pid=" + ProcessHandle.current().pid();
 
         logger.info("Systemd watchdog strategy activated. NOTIFY_SOCKET={}", notifySocketPath);
         this.degraded = false;
@@ -123,7 +126,7 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
         }
 
         try {
-            Process proc = new ProcessBuilder(SYSTEMD_NOTIFY_CMD, message).start();
+            Process proc = new ProcessBuilder(SYSTEMD_NOTIFY_CMD, this.pidArg, message).start();
             boolean finished = proc.waitFor(SYSTEMD_NOTIFY_TIMEOUT_SEC, TimeUnit.SECONDS);
             if (!finished) {
                 proc.destroyForcibly();
