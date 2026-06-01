@@ -14,11 +14,6 @@
 package org.eclipse.kura.linux.watchdog;
 
 import java.io.IOException;
-import java.net.StandardProtocolFamily;
-import java.net.UnixDomainSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.DatagramChannel;
-import java.nio.charset.StandardCharsets;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,8 +26,8 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
     static final String WATCHDOG_USEC_ENV = "WATCHDOG_USEC";
     static final String WATCHDOG_PID_ENV = "WATCHDOG_PID";
 
-    private DatagramChannel notifyChannel;
-    private UnixDomainSocketAddress notifyAddress;
+    static final String SYSTEMD_NOTIFY_CMD = "systemd-notify";
+
     private long watchdogUsec;
     private boolean degraded;
 
@@ -58,7 +53,7 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
                     logger.debug(
                             "WATCHDOG_PID ({}) does not match current PID ({}). "
                                     + "This is expected for forking services. "
-                                    + "The notify socket will still be used for watchdog pings.",
+                                    + "systemd-notify will be used for watchdog pings.",
                             expectedPid, currentPid);
                 }
             } catch (NumberFormatException e) {
@@ -79,33 +74,18 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
             }
         }
 
-        String socketPath = notifySocketPath;
-        if (socketPath.startsWith("@")) {
-            socketPath = "\0" + socketPath.substring(1);
-        }
-
-        this.notifyAddress = UnixDomainSocketAddress.of(socketPath);
-        this.notifyChannel = DatagramChannel.open(StandardProtocolFamily.UNIX);
-
         logger.info("Systemd watchdog strategy activated. NOTIFY_SOCKET={}", notifySocketPath);
         this.degraded = false;
     }
 
     @Override
     public void refresh() {
-        if (this.degraded) {
-            return;
-        }
-        sendNotify("WATCHDOG=1\n");
+        sendNotify("WATCHDOG=1");
     }
 
     @Override
     public void disable() {
-        if (this.degraded) {
-            return;
-        }
-        sendNotify("STOPPING=1\n");
-        closeChannel();
+        sendNotify("STOPPING=1");
     }
 
     @Override
@@ -118,11 +98,11 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
 
     @Override
     public void trigger() {
-        sendNotify("WATCHDOG=trigger\n");
+        sendNotify("WATCHDOG=trigger");
     }
 
     void notifyReady() {
-        sendNotify("READY=1\n");
+        sendNotify("READY=1");
     }
 
     @Override
@@ -135,28 +115,23 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
     }
 
     private void sendNotify(String message) {
-        if (this.notifyChannel == null || !this.notifyChannel.isOpen()) {
-            logger.warn("Cannot send notification: channel is not open");
+        if (this.degraded) {
             return;
         }
 
         try {
-            ByteBuffer buffer = ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8));
-            this.notifyChannel.send(buffer, this.notifyAddress);
-            logger.debug("Sent notification: {}", message.trim());
-        } catch (IOException e) {
-            logger.error("Failed to send notification to systemd: {}", message.trim(), e);
-        }
-    }
-
-    private void closeChannel() {
-        if (this.notifyChannel != null) {
-            try {
-                this.notifyChannel.close();
-            } catch (IOException e) {
-                logger.error("Failed to close notify channel", e);
+            Process proc = new ProcessBuilder(SYSTEMD_NOTIFY_CMD, message).start();
+            int exitCode = proc.waitFor();
+            if (exitCode != 0) {
+                logger.warn("systemd-notify failed with exit code {} for: {}", exitCode, message);
+            } else {
+                logger.debug("Sent notification: {}", message);
             }
-            this.notifyChannel = null;
+        } catch (IOException e) {
+            logger.error("Failed to invoke systemd-notify for: {}", message, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.warn("systemd-notify interrupted for: {}", message);
         }
     }
 }
