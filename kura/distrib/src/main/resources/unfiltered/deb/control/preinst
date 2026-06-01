@@ -79,31 +79,31 @@ function ensure_systemd_watchdog() {
     # Also remove any legacy disable config from Kura <=5.
     #
     # https://manpages.debian.org/testing/systemd/systemd-system.conf.5.en.html
+    # /etc/systemd/system.conf.d/ is the admin-config path.
     #
-    path=""
-    if [ -d /usr/lib/systemd/system.conf.d/ ]; then
-        path="/usr/lib/systemd/system.conf.d"
-    elif [ -d /usr/local/lib/systemd/system.conf.d/ ]; then
-        path="/usr/local/lib/systemd/system.conf.d"
-    elif [ -d /etc/systemd/system.conf.d/ ]; then
-        path="/etc/systemd/system.conf.d"
+    DROPDIR="/etc/systemd/system.conf.d"
+
+    mkdir -p "${DROPDIR}"
+    if [ ! -d "${DROPDIR}" ]; then
+        echo "Failed to create systemd drop-in directory ${DROPDIR}"
+        return 1
     fi
 
-    if [ ! -z "${path}" ]; then
-        # Remove legacy disable config from Kura <=5 if present
-        if [ -f "${path}/${SYSTEMD_WATCHDOG_DISABLE_FILE}" ]; then
-            echo "Removing legacy systemd watchdog disable config: ${path}/${SYSTEMD_WATCHDOG_DISABLE_FILE}"
-            rm -f "${path}/${SYSTEMD_WATCHDOG_DISABLE_FILE}"
+    # Remove legacy disable config from Kura <=5 in any of the three standard locations
+    for dir in /usr/lib/systemd/system.conf.d /usr/local/lib/systemd/system.conf.d /etc/systemd/system.conf.d; do
+        local legacy="${dir}/${SYSTEMD_WATCHDOG_DISABLE_FILE}"
+        if [ -f "${legacy}" ]; then
+            echo "Removing legacy systemd watchdog disable config: ${legacy}"
+            rm -f "${legacy}"
         fi
+    done
 
-        # Enable systemd hardware watchdog for PID1
-        echo "Enabling systemd hardware watchdog management (RuntimeWatchdogSec=60)"
-        echo -e "${SYSTEMD_WATCHDOG_ENABLE_CONFIG}" > ${path}/zz-kura-enable-watchdog.conf
-        chmod 644 ${path}/zz-kura-enable-watchdog.conf
-        systemctl daemon-reload
-    else
-        echo "No systemd drop-in directory found, systemd watchdog not configured"
-    fi
+    # Enable systemd hardware watchdog for PID1
+    echo "Enabling systemd hardware watchdog management (RuntimeWatchdogSec=60)"
+    echo -e "${SYSTEMD_WATCHDOG_ENABLE_CONFIG}" > ${DROPDIR}/zz-kura-enable-watchdog.conf
+    chmod 644 ${DROPDIR}/zz-kura-enable-watchdog.conf
+    systemctl daemon-reload
+    echo "Systemd watchdog configuration complete."
 }
 
 # Pre-install script
