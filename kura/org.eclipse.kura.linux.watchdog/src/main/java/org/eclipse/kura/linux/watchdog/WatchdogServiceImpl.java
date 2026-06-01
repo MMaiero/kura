@@ -129,7 +129,7 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
         if (this.options != null && this.options.isEnabled()) {
             checkCriticalComponents();
         } else if (this.watchdogStrategy != null) {
-            logger.debug("Refreshing watchdog (passive mode).");
+            logger.info("Refreshing watchdog (passive mode).");
             this.watchdogStrategy.refresh();
         }
     }

@@ -134,7 +134,7 @@ public class SystemdWatchdogStrategy implements WatchdogStrategy {
             } else if (proc.exitValue() != 0) {
                 logger.warn("systemd-notify failed with exit code {} for: {}", proc.exitValue(), message);
             } else {
-                logger.debug("Sent notification: {}", message);
+                logger.info("Sent notification: {}", message);
             }
             proc.getInputStream().close();
             proc.getErrorStream().close();
