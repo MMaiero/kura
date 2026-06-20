@@ -167,7 +167,8 @@ public class WatchdogServiceImplTest {
     }
 
     @Test
-    public void testDisabledStillRefreshesWatchdog() throws NoSuchFieldException, IOException, InterruptedException {
+    public void testDisabledDirectLeavesWatchdogUntouched()
+            throws NoSuchFieldException, IOException, InterruptedException {
         final WatchdogTestWriter watchdogWriter = new WatchdogTestWriter();
         TestWatchdogServiceImpl svc = new TestWatchdogServiceImpl(watchdogWriter);
 
@@ -175,15 +176,16 @@ public class WatchdogServiceImplTest {
 
         svc.activate(properties);
 
-        assertTrue(watchdogWriter.waitForData(10000));
-        assertTrue(watchdogWriter.toString().contains("w"));
+        assertFalse(watchdogWriter.waitForData(1000));
+        assertTrue(watchdogWriter.toString().isEmpty());
 
+        assertNull(TestUtil.getFieldValue(svc, "watchdogStrategy"));
         assertNull(TestUtil.getFieldValue(svc, "timedOutOn"));
 
         svc.deactivate();
 
-        assertTrue(watchdogWriter.waitForData(5000));
-        assertTrue(watchdogWriter.toString().contains("V"));
+        assertFalse(watchdogWriter.waitForData(1000));
+        assertTrue(watchdogWriter.toString().isEmpty());
     }
 
     @Test

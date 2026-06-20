@@ -102,37 +102,17 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
             }
         }
 
-        WatchdogMode mode = newOptions.getWatchdogMode();
-        logger.info("Initializing watchdog strategy: {} (enabled={})", mode.getValue(), newOptions.isEnabled());
+        WatchdogMode requestedMode = newOptions.getWatchdogMode();
+        logger.info("Initializing watchdog strategy: {} (enabled={})", requestedMode.getValue(),
+                newOptions.isEnabled());
 
-        try {
-            this.watchdogStrategy = createWatchdogStrategy(mode);
-            this.watchdogStrategy.activate(newOptions);
-        } catch (Exception e) {
-            logger.warn("Failed to activate watchdog strategy '{}'. Attempting fallback.", mode.getValue(), e);
-            this.watchdogStrategy = null;
+        WatchdogMode activatedMode = activateStrategy(requestedMode, newOptions);
+
+        if (activatedMode == null) {
+            return;
         }
 
-        if (this.watchdogStrategy != null && this.watchdogStrategy.isDegraded()) {
-            logger.warn(
-                    "Watchdog strategy '{}' is running in degraded mode. Attempting fallback to direct strategy.",
-                    mode.getValue());
-            this.watchdogStrategy = null;
-        }
-
-        if (this.watchdogStrategy == null) {
-            try {
-                logger.info("Falling back to direct watchdog strategy.");
-                this.watchdogStrategy = createWatchdogStrategy(WatchdogMode.DIRECT);
-                this.watchdogStrategy.activate(newOptions);
-                mode = WatchdogMode.DIRECT;
-            } catch (Exception e) {
-                logger.error("Failed to activate fallback direct watchdog strategy", e);
-                return;
-            }
-        }
-
-        if (mode == WatchdogMode.DIRECT) {
+        if (activatedMode == WatchdogMode.DIRECT) {
             try (PrintWriter wdWriter = new PrintWriter(newOptions.getWatchdogEnabledTemporaryFilePath())) {
                 wdWriter.write(newOptions.getWatchdogDevice());
             } catch (Exception e) {
@@ -140,12 +120,67 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
             }
         }
 
-        this.activeMode = mode;
+        this.activeMode = activatedMode;
 
         this.pollTask = this.pollExecutor.scheduleAtFixedRate(() -> {
             Thread.currentThread().setName("WatchdogServiceImpl");
             doTick();
         }, 0, this.options.getPingInterval(), TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Activates the requested watchdog strategy, falling back to the direct strategy when the requested one is
+     * unavailable or degraded. Returns the mode that was actually activated, or {@code null} if no strategy could be
+     * activated.
+     */
+    private WatchdogMode activateStrategy(WatchdogMode requestedMode, WatchdogServiceOptions newOptions) {
+        for (WatchdogMode candidate : candidateModes(requestedMode)) {
+            if (candidate != requestedMode) {
+                logger.info("Falling back to {} watchdog strategy.", candidate.getValue());
+            }
+            WatchdogStrategy strategy = tryActivate(candidate, newOptions);
+            if (strategy != null) {
+                this.watchdogStrategy = strategy;
+                return candidate;
+            }
+        }
+
+        this.watchdogStrategy = null;
+        return null;
+    }
+
+    private static List<WatchdogMode> candidateModes(WatchdogMode requestedMode) {
+        if (requestedMode == WatchdogMode.DIRECT) {
+            return List.of(WatchdogMode.DIRECT);
+        }
+        return List.of(requestedMode, WatchdogMode.DIRECT);
+    }
+
+    /**
+     * Creates and activates a single watchdog strategy. Returns {@code null} if the strategy fails to activate or
+     * reports degraded operation. The direct strategy opens (and thereby arms) the hardware watchdog device, so it is
+     * activated only when the service is enabled; when disabled the device is left untouched.
+     */
+    private WatchdogStrategy tryActivate(WatchdogMode mode, WatchdogServiceOptions newOptions) {
+        if (mode == WatchdogMode.DIRECT && !newOptions.isEnabled()) {
+            logger.info("Watchdog is disabled; leaving the hardware watchdog device untouched (direct mode).");
+            return null;
+        }
+
+        WatchdogStrategy strategy = createWatchdogStrategy(mode);
+        try {
+            strategy.activate(newOptions);
+        } catch (Exception e) {
+            logger.warn("Failed to activate watchdog strategy '{}'.", mode.getValue(), e);
+            return null;
+        }
+
+        if (strategy.isDegraded()) {
+            logger.warn("Watchdog strategy '{}' is running in degraded mode.", mode.getValue());
+            return null;
+        }
+
+        return strategy;
     }
 
     private void doTick() {
@@ -284,13 +319,19 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
         try {
             Process proc = Runtime.getRuntime().exec("sync");
             proc.waitFor();
-        } catch (Exception e) {
+        } catch (IOException e) {
             logger.error("Filesystem sync failed. Continuing", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Filesystem sync interrupted. Continuing", e);
         }
 
         try {
             Process proc = Runtime.getRuntime().exec("reboot");
-            proc.waitFor();
+            int exitCode = proc.waitFor();
+            if (exitCode != 0) {
+                throw new KuraException(KuraErrorCode.OS_COMMAND_ERROR, "reboot", exitCode);
+            }
         } catch (IOException e) {
             throw new KuraException(KuraErrorCode.PROCESS_EXECUTION_ERROR, e);
         } catch (InterruptedException e) {
