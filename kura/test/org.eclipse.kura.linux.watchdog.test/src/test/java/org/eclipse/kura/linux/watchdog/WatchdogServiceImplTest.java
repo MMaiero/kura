@@ -81,6 +81,19 @@ public class WatchdogServiceImplTest {
         }
     }
 
+    private class DegradedSystemdWatchdogStrategy extends SystemdWatchdogStrategy {
+
+        @Override
+        protected String getEnvVar(String name) {
+            return null;
+        }
+
+        @Override
+        protected boolean isSystemdNotifyAvailable() {
+            return false;
+        }
+    }
+
     public class TestWatchdogServiceImpl extends WatchdogServiceImpl {
 
         private final Writer testWriter;
@@ -348,12 +361,124 @@ public class WatchdogServiceImplTest {
     }
 
     @Test
+    public void testSystemdWatchdogStrategyDegradedWhenNotifyBinaryMissing() throws Exception {
+        SystemdWatchdogStrategy strategy = new SystemdWatchdogStrategy() {
+
+            @Override
+            protected String getEnvVar(String name) {
+                if (NOTIFY_SOCKET_ENV.equals(name)) {
+                    return "/tmp/test-notify-socket";
+                }
+                if (WATCHDOG_USEC_ENV.equals(name)) {
+                    return "30000000";
+                }
+                return null;
+            }
+
+            @Override
+            protected boolean isSystemdNotifyAvailable() {
+                return false;
+            }
+        };
+
+        strategy.activate(new WatchdogServiceOptions(new HashMap<>()));
+
+        assertTrue(strategy.isDegraded());
+        assertEquals(0, strategy.getHardwareTimeout());
+    }
+
+    @Test
+    public void testSystemdWatchdogStrategySuspendDoesNotSendStopping() throws Exception {
+        SystemdWatchdogStrategy strategy = new SystemdWatchdogStrategy() {
+
+            @Override
+            protected String getEnvVar(String name) {
+                if (NOTIFY_SOCKET_ENV.equals(name)) {
+                    return "/tmp/test-notify-socket";
+                }
+                return null;
+            }
+
+            @Override
+            protected boolean isSystemdNotifyAvailable() {
+                return true;
+            }
+        };
+
+        strategy.activate(new WatchdogServiceOptions(new HashMap<>()));
+
+        assertFalse(strategy.isDegraded());
+
+        strategy.suspend();
+
+        assertFalse(strategy.isDegraded());
+        assertTrue((boolean) TestUtil.getFieldValue(strategy, "suspended"));
+
+        strategy.disable();
+
+        assertTrue((boolean) TestUtil.getFieldValue(strategy, "suspended"));
+    }
+
+    @Test
+    public void testDirectTriggerClosesWithoutMagicClose() throws Throwable {
+        final WatchdogTestWriter watchdogWriter = new WatchdogTestWriter();
+
+        DirectWatchdogStrategy strategy = new TestDirectWatchdogStrategy(watchdogWriter);
+        Map<String, Object> properties = new HashMap<>();
+        properties.put("watchdogDevice", WATCHDOG_TEST_DEVICE);
+        properties.put("rebootCauseFilePath", "target/watchdogTestCauses");
+        properties.put("enabled", true);
+        properties.put("watchdogMode", "direct");
+
+        WatchdogServiceOptions options = new WatchdogServiceOptions(properties);
+        strategy.activate(options);
+
+        strategy.refresh();
+        assertTrue(watchdogWriter.waitForData(10000));
+        assertTrue(watchdogWriter.toString().contains("w"));
+
+        strategy.trigger();
+
+        assertFalse(watchdogWriter.toString().contains("V"));
+
+        int lengthAfterTrigger = watchdogWriter.toString().length();
+
+        strategy.refresh();
+        assertEquals(lengthAfterTrigger, watchdogWriter.toString().length());
+    }
+
+    @Test
+    public void testDirectSuspendWritesMagicClose() throws Throwable {
+        final WatchdogTestWriter watchdogWriter = new WatchdogTestWriter();
+
+        DirectWatchdogStrategy strategy = new TestDirectWatchdogStrategy(watchdogWriter);
+        Map<String, Object> properties = new HashMap<>();
+        properties.put("watchdogDevice", WATCHDOG_TEST_DEVICE);
+        properties.put("rebootCauseFilePath", "target/watchdogTestCauses");
+        properties.put("enabled", true);
+        properties.put("watchdogMode", "direct");
+
+        WatchdogServiceOptions options = new WatchdogServiceOptions(properties);
+        strategy.activate(options);
+
+        strategy.refresh();
+        assertTrue(watchdogWriter.waitForData(10000));
+
+        strategy.suspend();
+        assertTrue(watchdogWriter.waitForData(10000));
+        assertTrue(watchdogWriter.toString().contains("V"));
+    }
+
+    @Test
     public void testAutoFallbackSystemdToDirect() throws NoSuchFieldException, IOException, InterruptedException {
         final WatchdogTestWriter watchdogWriter = new WatchdogTestWriter();
 
         WatchdogServiceImpl svc = new WatchdogServiceImpl() {
             @Override
             protected WatchdogStrategy createWatchdogStrategy(WatchdogMode mode) {
+                if (mode == WatchdogMode.SYSTEMD) {
+                    return new DegradedSystemdWatchdogStrategy();
+                }
                 if (mode == WatchdogMode.DIRECT) {
                     return new TestDirectWatchdogStrategy(watchdogWriter);
                 }
@@ -362,6 +487,7 @@ public class WatchdogServiceImplTest {
         };
 
         Map<String, Object> properties = getProperties(true);
+        properties.put("watchdogMode", "systemd");
         svc.activate(properties);
 
         Thread.sleep(500);

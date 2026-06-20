@@ -18,6 +18,7 @@ REFRESH_TIME=5
 TIMEOUT_TIME=300
 TIMESTAMP=$(date +%Y%m%d%H%M)
 LOG=/tmp/kura_uninstall_${TIMESTAMP}.log
+DPKG_ACTION="${1:-}"
 
 ##############################################
 # UTILITY FUNCTIONS
@@ -64,6 +65,14 @@ function stopWatchdog {
 }
 
 function remove_systemd_watchdog_config() {
+    # Only remove on actual package removal, not during upgrades or
+    # deconfiguration. Kura blocks upgrades in prerm, but this guard
+    # prevents issues if that block is ever removed.
+    if [ "$DPKG_ACTION" = "upgrade" ] || [ "$DPKG_ACTION" = "failed-upgrade" ] || [ "$DPKG_ACTION" = "deconfigure" ]; then
+        echo "Skipping systemd watchdog config removal (dpkg action: $DPKG_ACTION)"
+        return
+    fi
+
     # Remove Kura's systemd watchdog config (both legacy disable from Kura <=5
     # and the enable config from Kura 6).
     removed=""

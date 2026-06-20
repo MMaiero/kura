@@ -69,8 +69,12 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
         WatchdogServiceOptions newOptions = new WatchdogServiceOptions(properties);
 
         if (this.pollTask != null && !this.pollTask.isCancelled()
+                && this.options != null
                 && this.activeMode == newOptions.getWatchdogMode()
-                && this.options != null && this.options.isEnabled() == newOptions.isEnabled()) {
+                && this.options.isEnabled() == newOptions.isEnabled()
+                && this.options.getPingInterval().equals(newOptions.getPingInterval())
+                && this.options.getWatchdogDevice().equals(newOptions.getWatchdogDevice())
+                && this.options.getRebootCauseFilePath().equals(newOptions.getRebootCauseFilePath())) {
             logger.info("Watchdog configuration unchanged. Keeping current strategy.");
             return;
         }
@@ -79,7 +83,7 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
             Thread.currentThread().setName("WatchdogServiceImpl");
             cancelPollTask();
             if (this.watchdogStrategy != null) {
-                this.watchdogStrategy.disable();
+                this.watchdogStrategy.suspend();
             }
             doUpdate(newOptions);
         });
@@ -119,7 +123,7 @@ public class WatchdogServiceImpl implements WatchdogService, ConfigurableCompone
         if (this.watchdogStrategy == null) {
             try {
                 logger.info("Falling back to direct watchdog strategy.");
-                this.watchdogStrategy = new DirectWatchdogStrategy();
+                this.watchdogStrategy = createWatchdogStrategy(WatchdogMode.DIRECT);
                 this.watchdogStrategy.activate(newOptions);
                 mode = WatchdogMode.DIRECT;
             } catch (Exception e) {

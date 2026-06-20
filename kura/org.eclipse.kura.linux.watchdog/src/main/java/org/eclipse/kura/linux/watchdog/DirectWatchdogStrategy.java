@@ -65,6 +65,11 @@ public class DirectWatchdogStrategy implements WatchdogStrategy {
     }
 
     @Override
+    public void suspend() {
+        disable();
+    }
+
+    @Override
     public int getHardwareTimeout() {
         return 0;
     }
@@ -123,6 +128,8 @@ public class DirectWatchdogStrategy implements WatchdogStrategy {
 
     @Override
     public void trigger() {
+        logger.warn("Triggering hardware watchdog: closing device without magic close character");
+        closeWatchdogFileWriter();
     }
 
     private void runCommand(String command) throws IOException, InterruptedException {

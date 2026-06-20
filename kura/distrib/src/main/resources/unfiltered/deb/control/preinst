@@ -19,6 +19,9 @@ TIMEOUT_TIME=300
 # Kura 6 uses systemd watchdog (sd_notify) by default. Systemd PID1 must
 # manage the hardware watchdog so that multiple services can share the
 # resource. This drop-in enables RuntimeWatchdogSec at PID1 level.
+# Note: Requires hardware watchdog timeout >= 60s. Most embedded watchdogs
+# support this. If your hardware has a shorter timeout, adjust the values
+# below accordingly.
 SYSTEMD_WATCHDOG_ENABLE_CONFIG="[Manager]
 RuntimeWatchdogSec=60
 RebootWatchdogSec=60
