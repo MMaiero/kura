@@ -81,6 +81,26 @@ node {
         }
     }
 
+    stage('generate-EN50716-report') {
+        if (!env.CHANGE_TARGET) {
+            dir("kura") {
+                withMaven(jdk: 'temurin-jdk21-latest', maven: 'apache-maven-3.9.9', publisherStrategy: 'EXPLICIT') {
+                    // Generate PMD report without suppressions
+                    sh '''
+                        mvn -B -ntp pmd:aggregate-pmd-check@en50716-consolidated \
+                            -pl '!distrib,!distrib/aarch64-core,!distrib/x86_64-core' \
+                            -Dkura.pmd.baseline= \
+                            -Dkura.pmd.failOnViolation=false
+                    '''
+                }
+                archiveArtifacts artifacts: 'target/pmd.xml', followSymlinks: false, allowEmptyArchive: false
+            }
+        } else {
+            echo "Skipping EN50716 report generation on PR"
+            Utils.markStageSkippedForConditional(STAGE_NAME)
+        }
+    }
+
     stage('Sonar') {
         timeout(time: 2, unit: 'HOURS') {
             dir("kura") {

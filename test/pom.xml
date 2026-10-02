@@ -31,6 +31,8 @@
     <description>Kura OSGi integration tests</description>
 
     <properties>
+        <!-- KJCS static analysis governs production code only -->
+        <kura.pmd.skip>true</kura.pmd.skip>
         <kura.basedir>${project.basedir}/..</kura.basedir>
         <kura.workdir>${project.build.directory}/test-env</kura.workdir>
         <kura.workdir.uri>${project.baseUri}target/test-env</kura.workdir.uri>

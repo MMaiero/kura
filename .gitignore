@@ -48,3 +48,6 @@ DEPENDENCIES
 
 # flatten-maven-plugin output (BOM)
 .flattened-pom.xml
+
+# KJCS PMD self-test output
+tools/pmd/selftest/actual-*.csv
