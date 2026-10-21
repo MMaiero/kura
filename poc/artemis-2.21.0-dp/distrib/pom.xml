@@ -109,4 +109,40 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <!-- ESF 7.6.x does not install the JMS and JTA specs in the base distribution:
+                they are part of the com.eurotech.framework.amq7 extra DP, that this DP replaces. -->
+            <id>esf</id>
+            <properties>
+                <org.apache.geronimo.specs.jms.version>1.0-alpha-2</org.apache.geronimo.specs.jms.version>
+                <org.apache.geronimo.specs.jta.version>1.1.1</org.apache.geronimo.specs.jta.version>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.geronimo.specs</groupId>
+                    <artifactId>geronimo-jms_2.0_spec</artifactId>
+                    <version>${org.apache.geronimo.specs.jms.version}</version>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.geronimo.specs</groupId>
+                    <artifactId>geronimo-jta_1.1_spec</artifactId>
+                    <version>${org.apache.geronimo.specs.jta.version}</version>
+                    <exclusions>
+                        <exclusion>
+                            <groupId>*</groupId>
+                            <artifactId>*</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 </project>

@@ -73,6 +73,28 @@ register components with the same PIDs.
 
 To roll back: uninstall the DP, stop Kura, restore `config.ini.bak`, start Kura.
 
+## Install on an ESF 7.6.x device
+
+ESF differs from Kura 5.6 in three points:
+
+- Artemis is not part of the base distribution: it is installed by the `com.eurotech.framework.amq7` extra DP,
+  that also ships the JMS 2.0 and JTA 1.1 specs. `config.ini` does not need any change.
+- The JMS and JTA specs must therefore be part of this DP. Build it with the `esf` profile:
+
+  ```bash
+  JAVA_HOME=$(/usr/libexec/java_home -v 17) mvn clean install -Pesf
+  ```
+
+- The bundles of this DP are not signed. With the production security policy they get no permissions and stay
+  unresolved, reporting an `Unresolved requirement: Import-Package: ...` error for the first package they import.
+  The device must run in development mode (`permit-debug` set to `true` in `user/security/security.policy`).
+
+Steps:
+
+1. Uninstall the `com.eurotech.framework.amq7` DP, if installed, from *Packages*.
+2. Install the DP built with `-Pesf` from *Packages* → *Install/Upgrade*.
+3. Enable the broker in *Services* → *Simple Artemis MQTT Broker*.
+
 ## How it was verified
 
 Off-device, in Equinox 3.16.0 on Java 17 with the same third party bundle versions shipped by Kura 5.6
